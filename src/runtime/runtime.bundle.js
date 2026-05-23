@@ -344,6 +344,44 @@ function isComixImageHost(hostname) {
     return typeof hostname === 'string' && /(^|\.)wowpic\d+\.store$/i.test(hostname);
 }
 
+function parseComixBlobInnerUrl(url) {
+    if (typeof url !== 'string' || !url || !url.startsWith('blob:')) return null;
+    return parseComixUrlSafely(url.slice(5));
+}
+
+function getComixImageParsedUrl(url) {
+    const parsed = parseComixUrlSafely(url);
+    if (!parsed) return null;
+    if (parsed.protocol !== 'blob:') return parsed;
+    return parseComixBlobInnerUrl(url);
+}
+
+function parseComixImagePath(pathname) {
+    if (typeof pathname !== 'string' || !pathname) return null;
+
+    // Primary comix reader CDN shape.
+    const iiMatch = pathname.match(/^\/ii\/([^/]+)\/(\d+)\.(webp|jpe?g|png|avif)$/i);
+    if (iiMatch) {
+        return {
+            hash: iiMatch[1],
+            pageRaw: iiMatch[2],
+            extension: iiMatch[3].toLowerCase()
+        };
+    }
+
+    // Fallback for alternate CDN layouts where page is still in filename.
+    const fileMatch = pathname.match(/\/([^/]+)\/(\d+)\.(webp|jpe?g|png|avif)$/i);
+    if (fileMatch) {
+        return {
+            hash: fileMatch[1],
+            pageRaw: fileMatch[2],
+            extension: fileMatch[3].toLowerCase()
+        };
+    }
+
+    return null;
+}
+
 function logComixParseIssue(kind, url, extra = {}) {
     if (typeof url !== 'string' || !url) return;
 
@@ -370,17 +408,19 @@ const comixSourceAdapter = {
         return /^\/title\/[^/]+\/[^/]+\/?$/i.test(parsed.pathname);
     },
     parseImageUrl(url) {
-        const parsed = parseComixUrlSafely(url);
-        if (!parsed || !isComixImageHost(parsed.hostname)) return null;
+        const parsed = getComixImageParsedUrl(url);
+        if (!parsed) return null;
 
-        // Matches /ii/{hash}/{page}.{ext}
-        const match = parsed.pathname.match(/^\/ii\/([^/]+)\/(\d+)\.(webp|jpe?g|png)$/i);
-        if (!match) return null;
+        const isKnownImageHost = isComixImageHost(parsed.hostname) || isComixHost(parsed.hostname);
+        if (!isKnownImageHost) return null;
 
-        const hash = match[1];
-        const page = Number(match[2]);
+        const pathInfo = parseComixImagePath(parsed.pathname);
+        if (!pathInfo) return null;
+
+        const hash = pathInfo.hash;
+        const page = Number(pathInfo.pageRaw);
         if (!Number.isFinite(page)) {
-            logComixParseIssue('page-number-invalid', url, { rawPage: match[2] });
+            logComixParseIssue('page-number-invalid', url, { rawPage: pathInfo.pageRaw });
             return null;
         }
 
@@ -388,7 +428,7 @@ const comixSourceAdapter = {
             parsedUrl: parsed,
             hash,
             page,
-            extension: match[3].toLowerCase(),
+            extension: pathInfo.extension,
             pageKey: `${hash}/${page}`
         };
     },
@@ -399,8 +439,7 @@ const comixSourceAdapter = {
         const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
         const sourceImgs = imgs.filter((img) => {
             const sourceUrl = getImageSourceUrl(img);
-            const parsed = parseComixUrlSafely(sourceUrl);
-            return !!parsed && isComixImageHost(parsed.hostname);
+            return !!sourceUrl && !!comixSourceAdapter.parseImageUrl(sourceUrl);
         });
         if (sourceImgs.length === 0) return null;
 
