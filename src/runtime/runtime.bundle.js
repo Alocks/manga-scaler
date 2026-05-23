@@ -1960,7 +1960,7 @@ function revokeProcessedBlobUrl(img) {
     delete img.dataset.aiBlobUrl;
 }
 
-function restoreOriginalImage(img, preserveProcessingState = false) {
+function restoreOriginalImage(img) {
     if (!(img instanceof HTMLImageElement)) return;
 
     revokeProcessedBlobUrl(img);
@@ -1983,11 +1983,9 @@ function restoreOriginalImage(img, preserveProcessingState = false) {
     }
 
     img.dataset.aiProcessed = 'false';
-    if (!preserveProcessingState) {
-        delete img.dataset.aiProcessedSrc;
-        delete img.dataset.aiProcessingSrc;
-        delete img.dataset.aiJobId;
-    }
+    delete img.dataset.aiProcessedSrc;
+    delete img.dataset.aiProcessingSrc;
+    delete img.dataset.aiJobId;
 }
 
 function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
@@ -2023,7 +2021,7 @@ function getInjectedCanvases(root) {
 function disableUpscalingForContainer(container, activeImg = null) {
     if (activeImg instanceof HTMLImageElement) {
         if (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc) {
-            restoreOriginalImage(activeImg, !!activeImg.dataset.aiProcessingSrc);
+            restoreOriginalImage(activeImg);
         }
         return;
     }
@@ -2665,10 +2663,10 @@ function isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent) {
     const latestSrc = getImageSourceUrl(img);
     return (
         !isForegroundTab() ||
+        !img.isConnected ||
+        img.parentElement !== parent ||
         img.dataset.aiJobId !== jobId ||
-        latestSrc !== sourceUrl ||
-        !canvas.isConnected ||
-        canvas.parentElement !== parent
+        latestSrc !== sourceUrl
     );
 }
 
@@ -3152,7 +3150,7 @@ if (chrome?.storage?.onChanged) {
 
             if (nextSettings.selectedEngineBackend === 'off') {
                 if (activeImg && (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc)) {
-                    restoreOriginalImage(activeImg, !!activeImg.dataset.aiProcessingSrc);
+                    restoreOriginalImage(activeImg);
                 }
             } else {
                 document.querySelectorAll('img[data-ai-processed-src]').forEach((img) => {

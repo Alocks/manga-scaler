@@ -129,10 +129,10 @@ function isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent) {
     const latestSrc = getImageSourceUrl(img);
     return (
         !isForegroundTab() ||
+        !img.isConnected ||
+        img.parentElement !== parent ||
         img.dataset.aiJobId !== jobId ||
-        latestSrc !== sourceUrl ||
-        !canvas.isConnected ||
-        canvas.parentElement !== parent
+        latestSrc !== sourceUrl
     );
 }
 
@@ -616,7 +616,7 @@ if (chrome?.storage?.onChanged) {
 
             if (nextSettings.selectedEngineBackend === 'off') {
                 if (activeImg && (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc)) {
-                    restoreOriginalImage(activeImg, !!activeImg.dataset.aiProcessingSrc);
+                    restoreOriginalImage(activeImg);
                 }
             } else {
                 document.querySelectorAll('img[data-ai-processed-src]').forEach((img) => {

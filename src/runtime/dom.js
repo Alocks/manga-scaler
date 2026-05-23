@@ -68,7 +68,7 @@ function revokeProcessedBlobUrl(img) {
     delete img.dataset.aiBlobUrl;
 }
 
-function restoreOriginalImage(img, preserveProcessingState = false) {
+function restoreOriginalImage(img) {
     if (!(img instanceof HTMLImageElement)) return;
 
     revokeProcessedBlobUrl(img);
@@ -91,11 +91,9 @@ function restoreOriginalImage(img, preserveProcessingState = false) {
     }
 
     img.dataset.aiProcessed = 'false';
-    if (!preserveProcessingState) {
-        delete img.dataset.aiProcessedSrc;
-        delete img.dataset.aiProcessingSrc;
-        delete img.dataset.aiJobId;
-    }
+    delete img.dataset.aiProcessedSrc;
+    delete img.dataset.aiProcessingSrc;
+    delete img.dataset.aiJobId;
 }
 
 function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
@@ -131,7 +129,7 @@ function getInjectedCanvases(root) {
 function disableUpscalingForContainer(container, activeImg = null) {
     if (activeImg instanceof HTMLImageElement) {
         if (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc) {
-            restoreOriginalImage(activeImg, !!activeImg.dataset.aiProcessingSrc);
+            restoreOriginalImage(activeImg);
         }
         return;
     }
