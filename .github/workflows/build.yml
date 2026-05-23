@@ -20,22 +20,22 @@ jobs:
       - name: Check for new commits
         id: commit_check
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ]; then
-            echo "No previous release tag found; continuing."
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No release tag found; continuing."
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          PREV_TAG_COMMIT=$(git rev-list -n 1 "$PREV_TAG")
-          HEAD_COMMIT=$(git rev-parse HEAD)
+          COMMITS_SINCE_TAG=$(git rev-list --count "$LATEST_TAG..HEAD")
 
-          if [ "$PREV_TAG_COMMIT" = "$HEAD_COMMIT" ]; then
-            echo "No new commits since $PREV_TAG; skipping build."
+          if [ "$COMMITS_SINCE_TAG" -eq 0 ]; then
+            echo "No new commits since $LATEST_TAG; skipping build."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          echo "Found $COMMITS_SINCE_TAG commit(s) since $LATEST_TAG; continuing build."
           echo "should_build=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js

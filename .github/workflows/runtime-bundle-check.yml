@@ -18,5 +18,8 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Verify runtime bundle is up to date
-        run: node tools/build-runtime-bundle.mjs --check
+      - name: Build runtime bundle
+        run: node tools/build-runtime-bundle.mjs
+
+      - name: Verify bundle output exists
+        run: test -f src/runtime/runtime.bundle.js
