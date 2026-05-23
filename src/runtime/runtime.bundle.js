@@ -1020,8 +1020,7 @@ async function clearProcessedCache() {
 // --- END src/runtime/cache.js ---
 
 // --- BEGIN src/runtime/adapters/engines/base_engine.js ---
-// Base engine adapter scaffold for implementing additional upscale backends.
-// New engines can clone this shape and replace each placeholder method.
+// Base engine adapter helpers for implementing additional upscale backends.
 
 function createBaseEngineAdapter(overrides = {}) {
     const adapter = {
@@ -1039,8 +1038,63 @@ function createBaseEngineAdapter(overrides = {}) {
     };
 }
 
-// Expose the scaffold factory so future engine files can reuse it.
+function createEngineAdapter(overrides = {}) {
+    return createBaseEngineAdapter(overrides);
+}
+
+function createLibraryBackedEngineAdapter({
+    getLibrary,
+    isLibrarySupported,
+    upscale,
+    ensureReady = async () => {},
+    resetState = () => {},
+    isInitialized = () => false,
+    isRuntimeSupported
+} = {}) {
+    if (typeof getLibrary !== 'function') {
+        throw new Error('createLibraryBackedEngineAdapter requires getLibrary()');
+    }
+    if (typeof isLibrarySupported !== 'function') {
+        throw new Error('createLibraryBackedEngineAdapter requires isLibrarySupported()');
+    }
+    if (typeof upscale !== 'function') {
+        throw new Error('createLibraryBackedEngineAdapter requires upscale()');
+    }
+
+    return createEngineAdapter({
+        isSupported: () => {
+            const lib = getLibrary();
+            return !!lib && isLibrarySupported(lib);
+        },
+        upscale,
+        prewarm: async (runtimeSettings = getRuntimePreferenceSnapshot()) => {
+            await ensureReady(runtimeSettings);
+        },
+        reset: () => {
+            resetState();
+        },
+        getDiagnosticsStatus: () => {
+            const lib = getLibrary();
+            const capable = !!lib && isLibrarySupported(lib);
+            const initialized = !!isInitialized();
+            const isSupported = typeof isRuntimeSupported === 'function'
+                ? !!isRuntimeSupported()
+                : capable;
+            return { capable, initialized, isSupported };
+        }
+    });
+}
+
+function engineLibraryHasAnyFunctions(lib, functionNames = []) {
+    if (!lib || typeof lib !== 'object' || !Array.isArray(functionNames)) return false;
+    return functionNames.some((name) => typeof lib[name] === 'function');
+}
+
+// Expose shared engine helpers for backend-specific adapters.
 window.createBaseEngineAdapter = createBaseEngineAdapter;
+window.createEngineAdapter = createEngineAdapter;
+window.createLibraryBackedEngineAdapter = createLibraryBackedEngineAdapter;
+window.engineLibraryHasAnyFunctions = engineLibraryHasAnyFunctions;
 // --- END src/runtime/adapters/engines/base_engine.js ---
 
 // --- BEGIN src/runtime/adapters/engines/webgl.js ---
@@ -1051,6 +1105,19 @@ let scaler = null;
 /** @type {Promise<any> | null} */
 let scalerPromise = null;
 const WEBGL_FALLBACK_MAX_CANVAS_DIMENSION = 16384;
+const WEBGL_UPSCALER_CTOR_NAMES = ['ImageUpscaler'];
+
+function getWebGlLibrary() {
+    const lib = window.Anime4KJS || window.Anime4K;
+    return lib && typeof lib === 'object' ? lib : null;
+}
+
+function isWebGlLibrarySupported(lib) {
+    if (typeof window.engineLibraryHasAnyFunctions === 'function') {
+        return window.engineLibraryHasAnyFunctions(lib, WEBGL_UPSCALER_CTOR_NAMES);
+    }
+    return WEBGL_UPSCALER_CTOR_NAMES.some((name) => typeof lib?.[name] === 'function');
+}
 
 function getRestoreUpscalePreset(lib, runtimeSettings = getRuntimePreferenceSnapshot()) {
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
@@ -1082,7 +1149,7 @@ async function getScaler(runtimeSettings = getRuntimePreferenceSnapshot()) {
     scalerPromise = (async () => {
         await Promise.all([presetReadyPromise, backendReadyPromise]);
 
-        const lib = window.Anime4KJS || window.Anime4K;
+        const lib = getWebGlLibrary();
         if (!lib) {
             throw new Error('Anime4KJS WebGL runtime not found on window');
         }
@@ -1124,30 +1191,6 @@ function resetWebGlAdapterState() {
     scalerPromise = null;
 }
 
-function getWebGlAdapterDiagnostics() {
-    const lib = window.Anime4KJS || window.Anime4K;
-    const capable = !!lib && typeof lib.ImageUpscaler === 'function';
-    const initialized = !!scaler;
-    const isSupported = initialized && scaler.supported === true;
-    return { capable, initialized, isSupported };
-}
-
-function createEngineAdapter(overrides = {}) {
-    if (typeof window.createBaseEngineAdapter === 'function') {
-        return window.createBaseEngineAdapter(overrides);
-    }
-
-    return {
-        isSupported: () => false,
-        upscale: async () => {
-            throw new Error('Base engine adapter: upscale() is not implemented');
-        },
-        prewarm: async () => {},
-        reset: () => {},
-        ...overrides
-    };
-}
-
 function resolveWebGlFallbackScale(runtimeSettings = getRuntimePreferenceSnapshot()) {
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
     const presetScaleMap = {
@@ -1158,10 +1201,6 @@ function resolveWebGlFallbackScale(runtimeSettings = getRuntimePreferenceSnapsho
         UL: 2
     };
     return presetScaleMap[settings.selectedSimplePreset] || 2;
-}
-
-function getWebGlFallbackMaxCanvasDimension() {
-    return WEBGL_FALLBACK_MAX_CANVAS_DIMENSION;
 }
 
 function upscaleWith2dFallback(tempImg, canvas, scale) {
@@ -1177,7 +1216,7 @@ function upscaleWith2dFallback(tempImg, canvas, scale) {
         throw new Error('2D fallback cannot resolve valid source dimensions');
     }
 
-    const maxCanvasDimension = getWebGlFallbackMaxCanvasDimension();
+    const maxCanvasDimension = WEBGL_FALLBACK_MAX_CANVAS_DIMENSION;
     if (sourceWidth > maxCanvasDimension || sourceHeight > maxCanvasDimension) {
         throw new Error(`2D fallback source exceeds canvas limits: source=${sourceWidth}x${sourceHeight}, max=${maxCanvasDimension}`);
     }
@@ -1206,55 +1245,62 @@ function upscaleWith2dFallback(tempImg, canvas, scale) {
     ctx.drawImage(tempImg, 0, 0, targetWidth, targetHeight);
 }
 
+async function runAnime4KWebGl(tempImg, canvas, runtimeSettings = getRuntimePreferenceSnapshot()) {
+    const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
+    const engine = await getScaler(settings);
+    if (!engine.supported) {
+        throw new Error('Anime4KJS WebGL pipeline not supported');
+    }
 
-window.WebGLAdapter = createEngineAdapter({
-    isSupported: () => {
-        return scaler && scaler.supported === true;
-    },
-    upscale: async (tempImg, canvas, runtimeSettings = getRuntimePreferenceSnapshot()) => {
-        const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
-        const engine = await getScaler(settings);
-        if (!engine.supported) {
-            throw new Error('Anime4KJS WebGL pipeline not supported');
-        }
+    const fallbackScale = resolveWebGlFallbackScale(settings);
 
-        const fallbackScale = resolveWebGlFallbackScale(settings);
-
-        try {
-            engine.attachSource(tempImg, canvas);
-            engine.upscale();
-        } catch (error) {
-            runtimeLog('webgl:fallback-2d', {
-                reason: 'webgl-error',
-                error: String(error),
-                sourceWidth: tempImg.naturalWidth || tempImg.width,
-                sourceHeight: tempImg.naturalHeight || tempImg.height,
-                fallbackScale
-            });
-            upscaleWith2dFallback(tempImg, canvas, fallbackScale);
-            return `2D_FALLBACK_${fallbackScale}X`;
-        } finally {
-            engine.detachSource();
-        }
-
-        if (canvas.width > 0 && canvas.height > 0) {
-            return `SIMPLE_${settings.selectedSimplePreset}`;
-        }
-
+    try {
+        engine.attachSource(tempImg, canvas);
+        engine.upscale();
+    } catch (error) {
         runtimeLog('webgl:fallback-2d', {
-            reason: 'empty-canvas',
+            reason: 'webgl-error',
+            error: String(error),
             sourceWidth: tempImg.naturalWidth || tempImg.width,
             sourceHeight: tempImg.naturalHeight || tempImg.height,
             fallbackScale
         });
         upscaleWith2dFallback(tempImg, canvas, fallbackScale);
         return `2D_FALLBACK_${fallbackScale}X`;
-    },
-    prewarm: async (runtimeSettings = getRuntimePreferenceSnapshot()) => {
-        await getScaler(runtimeSettings);
-    },
-    reset: resetWebGlAdapterState,
-    getDiagnosticsStatus: getWebGlAdapterDiagnostics
+    } finally {
+        engine.detachSource();
+    }
+
+    if (canvas.width > 0 && canvas.height > 0) {
+        return `SIMPLE_${settings.selectedSimplePreset}`;
+    }
+
+    runtimeLog('webgl:fallback-2d', {
+        reason: 'empty-canvas',
+        sourceWidth: tempImg.naturalWidth || tempImg.width,
+        sourceHeight: tempImg.naturalHeight || tempImg.height,
+        fallbackScale
+    });
+    upscaleWith2dFallback(tempImg, canvas, fallbackScale);
+    return `2D_FALLBACK_${fallbackScale}X`;
+}
+
+async function prewarmWebGl(runtimeSettings = getRuntimePreferenceSnapshot()) {
+    await getScaler(runtimeSettings);
+}
+
+function isWebGlRuntimeSupported() {
+    return !!scaler && scaler.supported === true;
+}
+
+window.WebGLAdapter = createLibraryBackedEngineAdapter({
+    getLibrary: getWebGlLibrary,
+    isLibrarySupported: isWebGlLibrarySupported,
+    upscale: runAnime4KWebGl,
+    ensureReady: prewarmWebGl,
+    resetState: resetWebGlAdapterState,
+    isInitialized: () => !!scaler,
+    isRuntimeSupported: isWebGlRuntimeSupported
 });
 // --- END src/runtime/adapters/engines/webgl.js ---
 
@@ -1266,10 +1312,18 @@ let webgpuRenderPipeline = null;
 let webgpuRenderPipelineFormat = null;
 let webgpuRenderBindGroupLayout = null;
 let webgpuSampler = null;
+const WEBGPU_MODEL_CTOR_NAMES = ['Anime4K', 'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'];
 
 function getWebGpuLibrary() {
     const lib = window['anime4k-webgpu'];
     return lib && typeof lib === 'object' ? lib : null;
+}
+
+function isWebGpuLibrarySupported(lib) {
+    if (typeof engineLibraryHasAnyFunctions === 'function') {
+        return engineLibraryHasAnyFunctions(lib, WEBGPU_MODEL_CTOR_NAMES);
+    }
+    return WEBGPU_MODEL_CTOR_NAMES.some((name) => typeof lib?.[name] === 'function');
 }
 
 function getWebGpuPresetCtor(lib, runtimeSettings = getRuntimePreferenceSnapshot()) {
@@ -1360,45 +1414,17 @@ async function getWebGpuDevice() {
     }
 }
 
+function getWebGpuLibraryForAdapter() {
+    if (!navigator?.gpu) return null;
+    return getWebGpuLibrary();
+}
+
 function resetWebGpuAdapterState() {
     webgpuDevicePromise = null;
     webgpuRenderPipeline = null;
     webgpuRenderPipelineFormat = null;
     webgpuRenderBindGroupLayout = null;
     webgpuSampler = null;
-}
-
-function getWebGpuAdapterDiagnostics() {
-    const lib = getWebGpuLibrary();
-    const capable = !!navigator?.gpu && !!lib;
-    const initialized = !!webgpuDevicePromise;
-    const isSupported = capable && (
-        typeof lib?.Anime4K === 'function' ||
-        typeof lib?.ModeA === 'function' ||
-        typeof lib?.ModeAA === 'function' ||
-        typeof lib?.ModeB === 'function' ||
-        typeof lib?.ModeBB === 'function' ||
-        typeof lib?.ModeC === 'function' ||
-        typeof lib?.ModeCA === 'function'
-    );
-
-    return { capable, initialized, isSupported };
-}
-
-function createEngineAdapter(overrides = {}) {
-    if (typeof window.createBaseEngineAdapter === 'function') {
-        return window.createBaseEngineAdapter(overrides);
-    }
-
-    return {
-        isSupported: () => false,
-        upscale: async () => {
-            throw new Error('Base engine adapter: upscale() is not implemented');
-        },
-        prewarm: async () => {},
-        reset: () => {},
-        ...overrides
-    };
 }
 
 function getWebGpuRenderShaderModules(device) {
@@ -1742,28 +1768,17 @@ async function runAnime4KWebGpu(tempImg, canvas, runtimeSettings = getRuntimePre
     return { model: singleRun.modelUsed, runMode: 'single' };
 }
 
+async function prewarmWebGpu() {
+    await getWebGpuDevice();
+}
 
-window.WebGPUAdapter = createEngineAdapter({
-    isSupported: () => {
-        if (!navigator?.gpu) return false;
-        const lib = getWebGpuLibrary();
-        if (!lib) return false;
-        return (
-            typeof lib.Anime4K === 'function' ||
-            typeof lib.ModeA === 'function' ||
-            typeof lib.ModeAA === 'function' ||
-            typeof lib.ModeB === 'function' ||
-            typeof lib.ModeBB === 'function' ||
-            typeof lib.ModeC === 'function' ||
-            typeof lib.ModeCA === 'function'
-        );
-    },
+window.WebGPUAdapter = createLibraryBackedEngineAdapter({
+    getLibrary: getWebGpuLibraryForAdapter,
+    isLibrarySupported: isWebGpuLibrarySupported,
     upscale: runAnime4KWebGpu,
-    prewarm: async () => {
-        await getWebGpuDevice();
-    },
-    reset: resetWebGpuAdapterState,
-    getDiagnosticsStatus: getWebGpuAdapterDiagnostics
+    ensureReady: prewarmWebGpu,
+    resetState: resetWebGpuAdapterState,
+    isInitialized: () => !!webgpuDevicePromise
 });
 // --- END src/runtime/adapters/engines/webgpu.js ---
 

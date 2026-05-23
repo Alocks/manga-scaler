@@ -5,10 +5,18 @@ let webgpuRenderPipeline = null;
 let webgpuRenderPipelineFormat = null;
 let webgpuRenderBindGroupLayout = null;
 let webgpuSampler = null;
+const WEBGPU_MODEL_CTOR_NAMES = ['Anime4K', 'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'];
 
 function getWebGpuLibrary() {
     const lib = window['anime4k-webgpu'];
     return lib && typeof lib === 'object' ? lib : null;
+}
+
+function isWebGpuLibrarySupported(lib) {
+    if (typeof engineLibraryHasAnyFunctions === 'function') {
+        return engineLibraryHasAnyFunctions(lib, WEBGPU_MODEL_CTOR_NAMES);
+    }
+    return WEBGPU_MODEL_CTOR_NAMES.some((name) => typeof lib?.[name] === 'function');
 }
 
 function getWebGpuPresetCtor(lib, runtimeSettings = getRuntimePreferenceSnapshot()) {
@@ -99,45 +107,17 @@ async function getWebGpuDevice() {
     }
 }
 
+function getWebGpuLibraryForAdapter() {
+    if (!navigator?.gpu) return null;
+    return getWebGpuLibrary();
+}
+
 function resetWebGpuAdapterState() {
     webgpuDevicePromise = null;
     webgpuRenderPipeline = null;
     webgpuRenderPipelineFormat = null;
     webgpuRenderBindGroupLayout = null;
     webgpuSampler = null;
-}
-
-function getWebGpuAdapterDiagnostics() {
-    const lib = getWebGpuLibrary();
-    const capable = !!navigator?.gpu && !!lib;
-    const initialized = !!webgpuDevicePromise;
-    const isSupported = capable && (
-        typeof lib?.Anime4K === 'function' ||
-        typeof lib?.ModeA === 'function' ||
-        typeof lib?.ModeAA === 'function' ||
-        typeof lib?.ModeB === 'function' ||
-        typeof lib?.ModeBB === 'function' ||
-        typeof lib?.ModeC === 'function' ||
-        typeof lib?.ModeCA === 'function'
-    );
-
-    return { capable, initialized, isSupported };
-}
-
-function createEngineAdapter(overrides = {}) {
-    if (typeof window.createBaseEngineAdapter === 'function') {
-        return window.createBaseEngineAdapter(overrides);
-    }
-
-    return {
-        isSupported: () => false,
-        upscale: async () => {
-            throw new Error('Base engine adapter: upscale() is not implemented');
-        },
-        prewarm: async () => {},
-        reset: () => {},
-        ...overrides
-    };
 }
 
 function getWebGpuRenderShaderModules(device) {
@@ -481,26 +461,15 @@ async function runAnime4KWebGpu(tempImg, canvas, runtimeSettings = getRuntimePre
     return { model: singleRun.modelUsed, runMode: 'single' };
 }
 
+async function prewarmWebGpu() {
+    await getWebGpuDevice();
+}
 
-window.WebGPUAdapter = createEngineAdapter({
-    isSupported: () => {
-        if (!navigator?.gpu) return false;
-        const lib = getWebGpuLibrary();
-        if (!lib) return false;
-        return (
-            typeof lib.Anime4K === 'function' ||
-            typeof lib.ModeA === 'function' ||
-            typeof lib.ModeAA === 'function' ||
-            typeof lib.ModeB === 'function' ||
-            typeof lib.ModeBB === 'function' ||
-            typeof lib.ModeC === 'function' ||
-            typeof lib.ModeCA === 'function'
-        );
-    },
+window.WebGPUAdapter = createLibraryBackedEngineAdapter({
+    getLibrary: getWebGpuLibraryForAdapter,
+    isLibrarySupported: isWebGpuLibrarySupported,
     upscale: runAnime4KWebGpu,
-    prewarm: async () => {
-        await getWebGpuDevice();
-    },
-    reset: resetWebGpuAdapterState,
-    getDiagnosticsStatus: getWebGpuAdapterDiagnostics
+    ensureReady: prewarmWebGpu,
+    resetState: resetWebGpuAdapterState,
+    isInitialized: () => !!webgpuDevicePromise
 });
