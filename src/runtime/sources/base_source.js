@@ -115,6 +115,7 @@ function createStructuredSourceAdapter({
     getActiveContainer = getGenericActiveContainer,
     selectForegroundImage,
     parseImageUrlOverride,
+    getImageLoadCandidates,
     supportsUrlOverride,
     isReaderPageUrlOverride,
     invalidPageIssue
@@ -151,6 +152,12 @@ function createStructuredSourceAdapter({
 
             if (typeof buildParsedImageMeta !== 'function') return null;
             return buildParsedImageMeta(parsedResult, url, adapter);
+        },
+        getImageLoadCandidates(sourceUrl, parsedImageInfo = null) {
+            if (typeof getImageLoadCandidates === 'function') {
+                return getImageLoadCandidates(sourceUrl, parsedImageInfo, adapter);
+            }
+            return [sourceUrl];
         },
         getActiveContainer(pageUrl) {
             if (typeof getActiveContainer === 'function') return getActiveContainer(pageUrl, adapter);

@@ -12,5 +12,19 @@
       "regexFilter": "^https?://(?:[^/]+\\.)?nhentai\\.net/galleries/\\d+/\\d+\\.(?:webp|jpe?g|png)(?:[?#].*)?$",
       "resourceTypes": ["image"]
     }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "access-control-allow-origin", "operation": "set", "value": "*" }
+      ]
+    },
+    "condition": {
+      "regexFilter": "^https?://(?:[^/]+\\.)?2xstorage\\.com/.+\\.(?:webp|jpe?g|png|avif)(?:[?#].*)?$",
+      "resourceTypes": ["image"]
+    }
   }
 ]

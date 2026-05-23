@@ -248,6 +248,26 @@ function reconcile(container) {
     }
 }
 
+function getSourceLoadCandidates(sourceUrl) {
+    if (typeof sourceUrl !== 'string' || !sourceUrl) return [];
+
+    const candidates = [sourceUrl];
+
+    const sourceLookup = typeof getSourceAdapterForImageUrl === 'function'
+        ? getSourceAdapterForImageUrl(sourceUrl)
+        : null;
+    const adapter = sourceLookup?.adapter || (typeof getActiveSourceAdapter === 'function' ? getActiveSourceAdapter() : null);
+
+    if (adapter && typeof adapter.getImageLoadCandidates === 'function') {
+        const adapterCandidates = adapter.getImageLoadCandidates(sourceUrl, sourceLookup?.parsed);
+        if (Array.isArray(adapterCandidates)) {
+            candidates.push(...adapterCandidates);
+        }
+    }
+
+    return [...new Set(candidates.filter((candidate) => typeof candidate === 'string' && !!candidate))];
+}
+
 function loadSourceImage(sourceUrl) {
     return new Promise((resolve, reject) => {
         if (typeof sourceUrl !== 'string' || !sourceUrl) {
@@ -255,9 +275,16 @@ function loadSourceImage(sourceUrl) {
             return;
         }
 
+        const loadCandidates = getSourceLoadCandidates(sourceUrl);
+        if (loadCandidates.length === 0) {
+            reject(new Error(`No load candidates resolved for source image URL: ${sourceUrl}`));
+            return;
+        }
+
         const tempImg = new Image();
         let settled = false;
         let timeoutId = null;
+        let attemptIndex = 0;
 
         const cleanup = () => {
             tempImg.onload = null;
@@ -282,18 +309,36 @@ function loadSourceImage(sourceUrl) {
             reject(error);
         };
 
-        tempImg.crossOrigin = 'anonymous';
-        tempImg.onload = () => settleResolve();
-        tempImg.onerror = () => {
-            settleReject(new Error(`Failed to load source image: ${sourceUrl}`));
+        const attemptNextCandidate = () => {
+            if (settled) return;
+
+            if (timeoutId !== null) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+
+            if (attemptIndex >= loadCandidates.length) {
+                settleReject(new Error(`Failed to load source image: ${sourceUrl} (tried ${loadCandidates.join(', ')})`));
+                return;
+            }
+
+            const candidateUrl = loadCandidates[attemptIndex++];
+
+            tempImg.crossOrigin = 'anonymous';
+            tempImg.onload = () => settleResolve();
+            tempImg.onerror = () => {
+                attemptNextCandidate();
+            };
+
+            timeoutId = window.setTimeout(() => {
+                tempImg.src = '';
+                attemptNextCandidate();
+            }, IMAGE_LOAD_TIMEOUT_MS);
+
+            tempImg.src = candidateUrl;
         };
 
-        timeoutId = window.setTimeout(() => {
-            tempImg.src = '';
-            settleReject(new Error(`Timed out loading source image after ${IMAGE_LOAD_TIMEOUT_MS}ms: ${sourceUrl}`));
-        }, IMAGE_LOAD_TIMEOUT_MS);
-
-        tempImg.src = sourceUrl;
+        attemptNextCandidate();
     });
 }
 

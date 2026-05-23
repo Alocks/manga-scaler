@@ -12,6 +12,7 @@ const runtimeSourceFiles = [
   'src/runtime/sources/nhentai.js',
   'src/runtime/sources/comix.js',
   'src/runtime/sources/mangadex.js',
+  'src/runtime/sources/mangakakalot_manganato.js',
   'src/runtime/url-utils.js',
   'src/runtime/cache.js',
   'src/runtime/adapters/engines/base_engine.js',

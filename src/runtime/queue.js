@@ -28,25 +28,25 @@ function getNextBackgroundQueueIndex() {
 }
 
 function queueBackgroundIfEligible(url, source) {
-    if (isRuntimeMutationSuppressed()) return;
-    if (!isReaderPageUrl(window.location.href)) return;
-    if (!isSourceImageUrl(url)) return;
+    if (isRuntimeMutationSuppressed()) return false;
+    if (!isReaderPageUrl(window.location.href)) return false;
+    if (!isSourceImageUrl(url)) return false;
 
     const runtimeSettings = getRuntimePreferenceSnapshot();
 
     if (!backendPreferenceLoaded) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'backend-pending' });
-        return;
+        return false;
     }
 
     if (getEffectiveBackend(runtimeSettings) === 'off') {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'backend-off' });
-        return;
+        return false;
     }
 
     if (!isForegroundTab()) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'tab-hidden' });
-        return;
+        return false;
     }
 
     const activeContainer = getActiveContainer();
@@ -54,32 +54,33 @@ function queueBackgroundIfEligible(url, source) {
     const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
     if (url === activeUrl) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'active-image' });
-        return;
+        return false;
     }
     const key = getSourcePageKey(url);
     if (key && processedPageKeys.has(key)) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'page-already-processed' });
-        return;
+        return false;
     }
     if (key && inFlightPageKeys.has(key)) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'page-in-flight' });
-        return;
+        return false;
     }
     if (key && backgroundQueue.some(u => getSourcePageKey(u) === key)) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'page-already-queued' });
-        return;
+        return false;
     }
     if (hasProcessedCacheEntry(url, runtimeSettings)) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'memory-cache-hit' });
-        return;
+        return false;
     }
     if (backgroundQueue.includes(url)) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'url-already-queued' });
-        return;
+        return false;
     }
 
     logQueueEvent('bg-queue:candidate', url, { source });
     preprocessBackgroundImage(url);
+    return true;
 }
 
 async function preprocessBackgroundImage(sourceUrl) {
@@ -282,21 +283,31 @@ function findAndProcessBackgroundImages() {
     const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
     const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
 
-    let found = 0;
+    let scannedSourceImages = 0;
+    let queued = 0;
+    const maxQueuedPerScan = 3;
+
     for (const img of allImages) {
         const srcUrl = getImageSourceUrl(img);
         if (!srcUrl || srcUrl === activeUrl) continue;
 
         if (isSourceImageUrl(srcUrl)) {
-            queueBackgroundIfEligible(srcUrl, 'scan');
-            found++;
+            scannedSourceImages++;
+            const enqueued = queueBackgroundIfEligible(srcUrl, 'scan');
+            if (enqueued) {
+                queued++;
+            }
 
-            if (found >= 3) break;
+            if (queued >= maxQueuedPerScan) break;
         }
     }
 
-    if (found > 0) {
-        log('bg-process:found', { count: found, queueSize: backgroundQueue.length });
+    if (scannedSourceImages > 0) {
+        log('bg-process:found', {
+            scannedSourceImages,
+            queued,
+            queueSize: backgroundQueue.length
+        });
     }
 }
 

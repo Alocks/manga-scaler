@@ -9,6 +9,8 @@ Currently works for the following websites:
 - Nhentai
 - Comix
 - MangaDex
+- Mangakakalot
+- Manganato
 
 Available engines and profiles:
 - **WebGL** Low performance
