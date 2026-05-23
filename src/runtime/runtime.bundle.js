@@ -194,38 +194,176 @@ webgpuScaleReadyPromise = loadWebGpuScalePreference();
 // --- END src/runtime/config.js ---
 
 // --- BEGIN src/runtime/sources/base_source.js ---
-// Template source adapter scaffold for adding a new website
-// Copy this file, rename identifiers, and implement the three adapter methods.
-
-const TEMPLATE_SOURCE_ID = 'template-site';
-
-const templateSiteSourceAdapter = {
-    id: TEMPLATE_SOURCE_ID,
-    supportsUrl(_url) {
-        // Return true when the URL belongs to your target website.
-        return false;
-    },
-    isReaderPageUrl(_url) {
-        // Return true only on pages where image upscaling should run.
-        return false;
-    },
-    parseImageUrl(_url) {
-        // Return null for non-matching image URLs.
-        // For matching URLs, return an object with at least:
-        // { page: Number, pageKey: String }
-        return null;
-    },
-    getActiveContainer(_pageUrl) {
-        // Return the Element that should be observed/processed.
-        // Return null if the reader container does not exist yet.
-        return null;
-    },
-    selectForegroundImage(_container, _pageUrl) {
-        // Return the single image element to process next.
-        // Return null when no source image is currently available.
+function parseSourceUrlSafely(url) {
+    if (typeof url !== 'string' || !url) return null;
+    try {
+        return new URL(url, window.location.href);
+    } catch {
         return null;
     }
-};
+}
+
+function parseSourceBlobInnerUrl(url, parseUrlFn = parseSourceUrlSafely) {
+    if (typeof url !== 'string' || !url || !url.startsWith('blob:')) return null;
+    return parseUrlFn(url.slice(5));
+}
+
+function getBlobAwareParsedUrl(url, parseUrlFn = parseSourceUrlSafely) {
+    const parsed = parseUrlFn(url);
+    if (!parsed) return null;
+    if (parsed.protocol !== 'blob:') return parsed;
+    return parseSourceBlobInnerUrl(url, parseUrlFn);
+}
+
+function logSourceParseIssue(issueStore, sourceId, kind, url, extra = {}) {
+    if (!(issueStore instanceof Set)) return;
+    if (typeof sourceId !== 'string' || !sourceId) return;
+    if (typeof url !== 'string' || !url) return;
+
+    const issueKey = `${kind}|${url}`;
+    if (issueStore.has(issueKey)) return;
+    issueStore.add(issueKey);
+
+    if (typeof window.NHScalerLog === 'function') {
+        window.NHScalerLog(`url:${kind}`, { source: sourceId, url, ...extra });
+    }
+}
+
+function selectVisibleOrUnprocessedImage(sourceImgs) {
+    if (!Array.isArray(sourceImgs) || sourceImgs.length === 0) return null;
+
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+    const visibleCandidate = sourceImgs.find((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        const computedStyle = window.getComputedStyle(img);
+        const rect = img.getBoundingClientRect();
+        return (
+            !!sourceUrl &&
+            computedStyle.display !== 'none' &&
+            computedStyle.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.bottom >= 0 &&
+            rect.top <= viewportHeight
+        );
+    });
+    if (visibleCandidate) return visibleCandidate;
+
+    const unprocessedCandidate = sourceImgs.find((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
+    });
+    if (unprocessedCandidate) return unprocessedCandidate;
+
+    return sourceImgs[0];
+}
+
+function getSourceImagesByParser(container, parseImageUrlFn) {
+    if (!(container instanceof Element) || typeof parseImageUrlFn !== 'function') return [];
+
+    const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
+    return imgs.filter((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        return !!sourceUrl && !!parseImageUrlFn(sourceUrl);
+    });
+}
+
+function parseStructuredImageUrl({
+    url,
+    parseUrlFn = parseSourceUrlSafely,
+    isImageHost,
+    parsePathname,
+    issueStore,
+    sourceId,
+    invalidPageIssue = 'page-number-invalid'
+}) {
+    const parsed = getBlobAwareParsedUrl(url, parseUrlFn);
+    if (!parsed) return null;
+
+    if (typeof isImageHost === 'function' && !isImageHost(parsed.hostname)) {
+        return null;
+    }
+
+    if (typeof parsePathname !== 'function') return null;
+    const pathInfo = parsePathname(parsed.pathname);
+    if (!pathInfo) return null;
+
+    const page = Number(pathInfo.pageRaw);
+    if (!Number.isFinite(page)) {
+        logSourceParseIssue(issueStore, sourceId, invalidPageIssue, url, { rawPage: pathInfo.pageRaw });
+        return null;
+    }
+
+    return { parsed, pathInfo, page };
+}
+
+function createStructuredSourceAdapter({
+    id,
+    supportsHost,
+    isReaderPath,
+    parsePathname,
+    buildParsedImageMeta,
+    isImageHost,
+    mirrorSourceImagePresentation = false,
+    issueStore,
+    parseUrlFn = parseSourceUrlSafely,
+    getActiveContainer = getGenericActiveContainer,
+    selectForegroundImage,
+    parseImageUrlOverride,
+    supportsUrlOverride,
+    isReaderPageUrlOverride,
+    invalidPageIssue
+}) {
+    if (typeof id !== 'string' || !id) return null;
+
+    const adapter = {
+        id,
+        mirrorSourceImagePresentation,
+        supportsUrl(url) {
+            if (typeof supportsUrlOverride === 'function') return !!supportsUrlOverride(url);
+            const parsed = parseUrlFn(url);
+            return !!parsed && typeof supportsHost === 'function' && supportsHost(parsed.hostname);
+        },
+        isReaderPageUrl(url) {
+            if (typeof isReaderPageUrlOverride === 'function') return !!isReaderPageUrlOverride(url);
+            const parsed = parseUrlFn(url);
+            if (!parsed || typeof supportsHost !== 'function' || !supportsHost(parsed.hostname)) return false;
+            return typeof isReaderPath === 'function' ? !!isReaderPath(parsed.pathname, parsed) : false;
+        },
+        parseImageUrl(url) {
+            if (typeof parseImageUrlOverride === 'function') return parseImageUrlOverride(url, adapter);
+
+            const parsedResult = parseStructuredImageUrl({
+                url,
+                parseUrlFn,
+                isImageHost,
+                parsePathname,
+                issueStore,
+                sourceId: id,
+                invalidPageIssue
+            });
+            if (!parsedResult) return null;
+
+            if (typeof buildParsedImageMeta !== 'function') return null;
+            return buildParsedImageMeta(parsedResult, url, adapter);
+        },
+        getActiveContainer(pageUrl) {
+            if (typeof getActiveContainer === 'function') return getActiveContainer(pageUrl, adapter);
+            return getGenericActiveContainer();
+        },
+        selectForegroundImage(container, pageUrl = window.location.href) {
+            if (typeof selectForegroundImage === 'function') {
+                return selectForegroundImage(container, pageUrl, adapter);
+            }
+
+            const sourceImgs = getSourceImagesByParser(container, (sourceUrl) => adapter.parseImageUrl(sourceUrl));
+            return selectVisibleOrUnprocessedImage(sourceImgs);
+        }
+    };
+
+    return adapter;
+}
 
 function registerSourceAdapter(adapter) {
     if (!adapter || typeof adapter !== 'object') return;
@@ -241,82 +379,49 @@ function registerSourceAdapter(adapter) {
         window.NHScalerSourceAdapters.push(adapter);
     }
 }
-
-registerSourceAdapter(templateSiteSourceAdapter);
 // --- END src/runtime/sources/base_source.js ---
 
 // --- BEGIN src/runtime/sources/nhentai.js ---
 // Source adapter for nhentai URL and reader/image detection
 
-const NHENTAI_SOURCE_ID = 'nhentai';
 const loggedNhentaiParseIssues = new Set();
-
-function parseNhentaiUrlSafely(url) {
-    if (typeof url !== 'string' || !url) return null;
-    try {
-        return new URL(url, window.location.href);
-    } catch {
-        return null;
-    }
-}
 
 function isNhentaiHost(hostname) {
     return typeof hostname === 'string' && /(^|\.)nhentai\.net$/i.test(hostname);
 }
 
-function logNhentaiParseIssue(kind, url, extra = {}) {
-    if (typeof url !== 'string' || !url) return;
-
-    const issueKey = `${kind}|${url}`;
-    if (loggedNhentaiParseIssues.has(issueKey)) return;
-    loggedNhentaiParseIssues.add(issueKey);
-
-    if (typeof window.NHScalerLog === 'function') {
-        window.NHScalerLog(`url:${kind}`, { source: NHENTAI_SOURCE_ID, url, ...extra });
-    }
+function isNhentaiImageHost(hostname) {
+    return isNhentaiHost(hostname);
 }
 
-const nhentaiSourceAdapter = {
-    id: NHENTAI_SOURCE_ID,
-    mirrorSourceImagePresentation: false,
-    supportsUrl(url) {
-        const parsed = parseNhentaiUrlSafely(url);
-        return !!parsed && isNhentaiHost(parsed.hostname);
-    },
-    isReaderPageUrl(url) {
-        const parsed = parseNhentaiUrlSafely(url);
-        if (!parsed || !isNhentaiHost(parsed.hostname)) return false;
-        return /^\/g\/\d+\/\d+\/?$/i.test(parsed.pathname);
-    },
-    parseImageUrl(url) {
-        const parsed = parseNhentaiUrlSafely(url);
-        if (!parsed || !isNhentaiHost(parsed.hostname)) return null;
+function parseNhentaiImagePath(pathname) {
+    if (typeof pathname !== 'string' || !pathname) return null;
 
-        const match = parsed.pathname.match(/^\/galleries\/(\d+)\/(\d+)\.(webp|jpe?g|png)$/i);
-        if (!match) return null;
+    const match = pathname.match(/^\/galleries\/(\d+)\/(\d+)\.(webp|jpe?g|png|avif)$/i);
+    if (!match) return null;
 
-        const galleryId = match[1];
-        const page = Number(match[2]);
-        if (!Number.isFinite(page)) {
-            logNhentaiParseIssue('page-number-invalid', url, { rawPage: match[2] });
-            return null;
-        }
+    return {
+        galleryId: match[1],
+        pageRaw: match[2],
+        extension: match[3].toLowerCase()
+    };
+}
 
-        return {
-            parsedUrl: parsed,
-            galleryId,
-            page,
-            extension: match[3].toLowerCase(),
-            pageKey: `${galleryId}/${page}`
-        };
-    },
-    getActiveContainer() {
-        return getGenericActiveContainer();
-    },
-    selectForegroundImage(container) {
-        return container.querySelector('img');
-    }
-};
+const nhentaiSourceAdapter = createStructuredSourceAdapter({
+    id: 'nhentai',
+    supportsHost: isNhentaiHost,
+    isReaderPath: (pathname) => /^\/g\/\d+\/\d+\/?$/i.test(pathname),
+    isImageHost: isNhentaiImageHost,
+    parsePathname: parseNhentaiImagePath,
+    issueStore: loggedNhentaiParseIssues,
+    buildParsedImageMeta: ({ parsed, pathInfo, page }) => ({
+        parsedUrl: parsed,
+        galleryId: pathInfo.galleryId,
+        page,
+        extension: pathInfo.extension,
+        pageKey: `${pathInfo.galleryId}/${page}`
+    })
+});
 
 registerSourceAdapter(nhentaiSourceAdapter);
 // --- END src/runtime/sources/nhentai.js ---
@@ -324,17 +429,7 @@ registerSourceAdapter(nhentaiSourceAdapter);
 // --- BEGIN src/runtime/sources/comix.js ---
 // Source adapter for comix.to URL and reader/image detection
 
-const COMIX_SOURCE_ID = 'comix';
 const loggedComixParseIssues = new Set();
-
-function parseComixUrlSafely(url) {
-    if (typeof url !== 'string' || !url) return null;
-    try {
-        return new URL(url, window.location.href);
-    } catch {
-        return null;
-    }
-}
 
 function isComixHost(hostname) {
     return typeof hostname === 'string' && /(^|\.)comix\.to$/i.test(hostname);
@@ -344,22 +439,9 @@ function isComixImageHost(hostname) {
     return typeof hostname === 'string' && /(^|\.)wowpic\d+\.store$/i.test(hostname);
 }
 
-function parseComixBlobInnerUrl(url) {
-    if (typeof url !== 'string' || !url || !url.startsWith('blob:')) return null;
-    return parseComixUrlSafely(url.slice(5));
-}
-
-function getComixImageParsedUrl(url) {
-    const parsed = parseComixUrlSafely(url);
-    if (!parsed) return null;
-    if (parsed.protocol !== 'blob:') return parsed;
-    return parseComixBlobInnerUrl(url);
-}
-
 function parseComixImagePath(pathname) {
     if (typeof pathname !== 'string' || !pathname) return null;
 
-    // Primary comix reader CDN shape.
     const iiMatch = pathname.match(/^\/ii\/([^/]+)\/(\d+)\.(webp|jpe?g|png|avif)$/i);
     if (iiMatch) {
         return {
@@ -369,7 +451,6 @@ function parseComixImagePath(pathname) {
         };
     }
 
-    // Fallback for alternate CDN layouts where page is still in filename.
     const fileMatch = pathname.match(/\/([^/]+)\/(\d+)\.(webp|jpe?g|png|avif)$/i);
     if (fileMatch) {
         return {
@@ -382,84 +463,21 @@ function parseComixImagePath(pathname) {
     return null;
 }
 
-function logComixParseIssue(kind, url, extra = {}) {
-    if (typeof url !== 'string' || !url) return;
-
-    const issueKey = `${kind}|${url}`;
-    if (loggedComixParseIssues.has(issueKey)) return;
-    loggedComixParseIssues.add(issueKey);
-
-    if (typeof window.NHScalerLog === 'function') {
-        window.NHScalerLog(`url:${kind}`, { source: COMIX_SOURCE_ID, url, ...extra });
-    }
-}
-
-const comixSourceAdapter = {
-    id: COMIX_SOURCE_ID,
-    mirrorSourceImagePresentation: false,
-    supportsUrl(url) {
-        const parsed = parseComixUrlSafely(url);
-        return !!parsed && isComixHost(parsed.hostname);
-    },
-    isReaderPageUrl(url) {
-        const parsed = parseComixUrlSafely(url);
-        if (!parsed || !isComixHost(parsed.hostname)) return false;
-        // Matches /title/{manga_title}/{chapter}
-        return /^\/title\/[^/]+\/[^/]+\/?$/i.test(parsed.pathname);
-    },
-    parseImageUrl(url) {
-        const parsed = getComixImageParsedUrl(url);
-        if (!parsed) return null;
-
-        const isKnownImageHost = isComixImageHost(parsed.hostname) || isComixHost(parsed.hostname);
-        if (!isKnownImageHost) return null;
-
-        const pathInfo = parseComixImagePath(parsed.pathname);
-        if (!pathInfo) return null;
-
-        const hash = pathInfo.hash;
-        const page = Number(pathInfo.pageRaw);
-        if (!Number.isFinite(page)) {
-            logComixParseIssue('page-number-invalid', url, { rawPage: pathInfo.pageRaw });
-            return null;
-        }
-
-        return {
-            parsedUrl: parsed,
-            hash,
-            page,
-            extension: pathInfo.extension,
-            pageKey: `${hash}/${page}`
-        };
-    },
-    getActiveContainer() {
-        return getGenericActiveContainer();
-    },
-    selectForegroundImage(container) {
-        const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
-        const sourceImgs = imgs.filter((img) => {
-            const sourceUrl = getImageSourceUrl(img);
-            return !!sourceUrl && !!comixSourceAdapter.parseImageUrl(sourceUrl);
-        });
-        if (sourceImgs.length === 0) return null;
-
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-
-        const visibleCandidate = sourceImgs.find((img) => {
-            const rect = img.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.top <= viewportHeight;
-        });
-        if (visibleCandidate) return visibleCandidate;
-
-        const unprocessedCandidate = sourceImgs.find((img) => {
-            const sourceUrl = getImageSourceUrl(img);
-            return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
-        });
-        if (unprocessedCandidate) return unprocessedCandidate;
-
-        return sourceImgs[0];
-    }
-};
+const comixSourceAdapter = createStructuredSourceAdapter({
+    id: 'comix',
+    supportsHost: isComixHost,
+    isReaderPath: (pathname) => /^\/title\/[^/]+\/[^/]+\/?$/i.test(pathname),
+    isImageHost: (hostname) => isComixImageHost(hostname) || isComixHost(hostname),
+    parsePathname: parseComixImagePath,
+    issueStore: loggedComixParseIssues,
+    buildParsedImageMeta: ({ parsed, pathInfo, page }) => ({
+        parsedUrl: parsed,
+        hash: pathInfo.hash,
+        page,
+        extension: pathInfo.extension,
+        pageKey: `${pathInfo.hash}/${page}`
+    })
+});
 
 registerSourceAdapter(comixSourceAdapter);
 // --- END src/runtime/sources/comix.js ---
@@ -467,22 +485,7 @@ registerSourceAdapter(comixSourceAdapter);
 // --- BEGIN src/runtime/sources/mangadex.js ---
 // Source adapter for MangaDex chapter URL and reader/image detection
 
-const MANGADEX_SOURCE_ID = 'mangadex';
 const loggedMangaDexParseIssues = new Set();
-
-function parseMangaDexUrlSafely(url) {
-    if (typeof url !== 'string' || !url) return null;
-    try {
-        return new URL(url, window.location.href);
-    } catch {
-        return null;
-    }
-}
-
-function parseBlobInnerUrl(url) {
-    if (typeof url !== 'string' || !url || !url.startsWith('blob:')) return null;
-    return parseMangaDexUrlSafely(url.slice(5));
-}
 
 function isMangaDexHost(hostname) {
     return typeof hostname === 'string' && /(^|\.)mangadex\.org$/i.test(hostname);
@@ -492,20 +495,13 @@ function isMangaDexImageHost(hostname) {
     return typeof hostname === 'string' && /(^|\.)uploads\.mangadex\.org$/i.test(hostname);
 }
 
-function isMangaDexImageUrl(url) {
-    const parsed = parseMangaDexUrlSafely(url);
-    if (!parsed) return false;
-
-    if (parsed.protocol === 'blob:') {
-        const inner = parseBlobInnerUrl(url);
-        return !!inner && isMangaDexHost(inner.hostname);
-    }
-
-    return isMangaDexImageHost(parsed.hostname);
+function toPositiveInt(value) {
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 function getMangaDexChapterId(pageUrl = window.location.href) {
-    const parsed = parseMangaDexUrlSafely(pageUrl);
+    const parsed = parseSourceUrlSafely(pageUrl);
     if (!parsed || !isMangaDexHost(parsed.hostname)) return null;
 
     const match = parsed.pathname.match(/^\/chapter\/([0-9a-f-]{32,36})(?:\/\d+)?\/?$/i);
@@ -524,21 +520,14 @@ function getMangaDexPageNumberFromDom(imageUrl) {
         const img = imgs[i];
         const srcUrl = getImageSourceUrl(img);
         if (!srcUrl) continue;
-        if (srcUrl === imageUrl) {
-            return i + 1;
-        }
+        if (srcUrl === imageUrl) return i + 1;
     }
 
     return null;
 }
 
-function toPositiveInt(value) {
-    const n = Number(value);
-    return Number.isInteger(n) && n > 0 ? n : null;
-}
-
 function getMangaDexCurrentPageFromUrl(pageUrl = window.location.href) {
-    const parsed = parseMangaDexUrlSafely(pageUrl);
+    const parsed = parseSourceUrlSafely(pageUrl);
     if (!parsed || !isMangaDexHost(parsed.hostname)) return null;
 
     const match = parsed.pathname.match(/^\/chapter\/[0-9a-f-]{32,36}\/(\d+)\/?$/i);
@@ -572,40 +561,20 @@ function getMangaDexCurrentPageNumber(pageUrl = window.location.href) {
     return getMangaDexCurrentPageFromUrl(pageUrl) || getMangaDexCurrentPageFromProgressUi();
 }
 
-function logMangaDexParseIssue(kind, url, extra = {}) {
-    if (typeof url !== 'string' || !url) return;
-
-    const issueKey = `${kind}|${url}`;
-    if (loggedMangaDexParseIssues.has(issueKey)) return;
-    loggedMangaDexParseIssues.add(issueKey);
-
-    if (typeof window.NHScalerLog === 'function') {
-        window.NHScalerLog(`url:${kind}`, { source: MANGADEX_SOURCE_ID, url, ...extra });
-    }
-}
-
-const mangadexSourceAdapter = {
-    id: MANGADEX_SOURCE_ID,
-    mirrorSourceImagePresentation: false,
-    supportsUrl(url) {
-        const parsed = parseMangaDexUrlSafely(url);
-        return !!parsed && isMangaDexHost(parsed.hostname);
-    },
-    isReaderPageUrl(url) {
-        const parsed = parseMangaDexUrlSafely(url);
-        if (!parsed || !isMangaDexHost(parsed.hostname)) return false;
-        return /^\/chapter\/[0-9a-f-]{32,36}(?:\/\d+)?\/?$/i.test(parsed.pathname);
-    },
-    parseImageUrl(url) {
-        if (!isMangaDexImageUrl(url)) return null;
-
-        const parsed = parseMangaDexUrlSafely(url);
-        if (!parsed) return null;
+const mangadexSourceAdapter = createStructuredSourceAdapter({
+    id: 'mangadex',
+    supportsHost: isMangaDexHost,
+    isReaderPath: (pathname) => /^\/chapter\/[0-9a-f-]{32,36}(?:\/\d+)?\/?$/i.test(pathname),
+    parseImageUrlOverride(url, adapter) {
+        const parsed = getBlobAwareParsedUrl(url, parseSourceUrlSafely);
+        if (!parsed || (!isMangaDexImageHost(parsed.hostname) && !isMangaDexHost(parsed.hostname))) return null;
 
         const chapterId = getMangaDexChapterId() || 'unknown';
         const page = getMangaDexPageNumberFromDom(url);
         if (page == null) {
-            logMangaDexParseIssue('page-number-missing', url, { chapterId });
+            logSourceParseIssue(loggedMangaDexParseIssues, adapter.id, 'page-number-missing', url, {
+                chapterId
+            });
         }
 
         return {
@@ -615,15 +584,8 @@ const mangadexSourceAdapter = {
             pageKey: page != null ? `${chapterId}/${page}` : `${chapterId}/${url}`
         };
     },
-    getActiveContainer() {
-        return getGenericActiveContainer();
-    },
-    selectForegroundImage(container, pageUrl = window.location.href) {
-        const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
-        const sourceImgs = imgs.filter((img) => {
-            const sourceUrl = getImageSourceUrl(img);
-            return !!sourceUrl && isMangaDexImageUrl(sourceUrl);
-        });
+    selectForegroundImage(container, pageUrl = window.location.href, adapter) {
+        const sourceImgs = getSourceImagesByParser(container, (sourceUrl) => adapter.parseImageUrl(sourceUrl));
         if (sourceImgs.length === 0) return null;
 
         const currentPage = getMangaDexCurrentPageNumber(pageUrl);
@@ -638,33 +600,9 @@ const mangadexSourceAdapter = {
             if (pageByAltPrefix) return pageByAltPrefix;
         }
 
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-
-        const visibleCandidate = sourceImgs.find((img) => {
-            const sourceUrl = getImageSourceUrl(img);
-            const computedStyle = window.getComputedStyle(img);
-            const rect = img.getBoundingClientRect();
-            return (
-                !!sourceUrl &&
-                computedStyle.display !== 'none' &&
-                computedStyle.visibility !== 'hidden' &&
-                rect.width > 0 &&
-                rect.height > 0 &&
-                rect.bottom >= 0 &&
-                rect.top <= viewportHeight
-            );
-        });
-        if (visibleCandidate) return visibleCandidate;
-
-        const unprocessedCandidate = sourceImgs.find((img) => {
-            const sourceUrl = getImageSourceUrl(img);
-            return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
-        });
-        if (unprocessedCandidate) return unprocessedCandidate;
-
-        return sourceImgs[0];
+        return selectVisibleOrUnprocessedImage(sourceImgs);
     }
-};
+});
 
 registerSourceAdapter(mangadexSourceAdapter);
 // --- END src/runtime/sources/mangadex.js ---
