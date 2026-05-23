@@ -30,6 +30,7 @@ function logNhentaiParseIssue(kind, url, extra = {}) {
 
 const nhentaiSourceAdapter = {
     id: NHENTAI_SOURCE_ID,
+    mirrorSourceImagePresentation: false,
     supportsUrl(url) {
         const parsed = parseNhentaiUrlSafely(url);
         return !!parsed && isNhentaiHost(parsed.hostname);
@@ -62,20 +63,11 @@ const nhentaiSourceAdapter = {
         };
     },
     getActiveContainer() {
-        return document.querySelector('#image-container');
+        return getGenericActiveContainer();
     },
     selectForegroundImage(container) {
         return container.querySelector('img');
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
-}
-
-const existingNhentaiAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === NHENTAI_SOURCE_ID);
-if (existingNhentaiAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingNhentaiAdapterIndex] = nhentaiSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(nhentaiSourceAdapter);
-}
+registerSourceAdapter(nhentaiSourceAdapter);

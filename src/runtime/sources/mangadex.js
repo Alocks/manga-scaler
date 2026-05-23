@@ -55,7 +55,7 @@ function getMangaDexPageNumberFromDom(imageUrl) {
     const imgs = getMangaDexReaderImages();
     for (let i = 0; i < imgs.length; i++) {
         const img = imgs[i];
-        const srcUrl = img.currentSrc || img.src || img.dataset.src;
+        const srcUrl = getImageSourceUrl(img);
         if (!srcUrl) continue;
         if (srcUrl === imageUrl) {
             return i + 1;
@@ -105,11 +105,6 @@ function getMangaDexCurrentPageNumber(pageUrl = window.location.href) {
     return getMangaDexCurrentPageFromUrl(pageUrl) || getMangaDexCurrentPageFromProgressUi();
 }
 
-function getMangaDexImageUrl(img) {
-    if (!(img instanceof HTMLImageElement)) return null;
-    return img.currentSrc || img.src || img.dataset.src || null;
-}
-
 function logMangaDexParseIssue(kind, url, extra = {}) {
     if (typeof url !== 'string' || !url) return;
 
@@ -124,6 +119,7 @@ function logMangaDexParseIssue(kind, url, extra = {}) {
 
 const mangadexSourceAdapter = {
     id: MANGADEX_SOURCE_ID,
+    mirrorSourceImagePresentation: false,
     supportsUrl(url) {
         const parsed = parseMangaDexUrlSafely(url);
         return !!parsed && isMangaDexHost(parsed.hostname);
@@ -153,12 +149,12 @@ const mangadexSourceAdapter = {
         };
     },
     getActiveContainer() {
-        return document.querySelector('.md--reader-pages') || document.querySelector('.md--page') || null;
+        return getGenericActiveContainer();
     },
     selectForegroundImage(container, pageUrl = window.location.href) {
         const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
         const sourceImgs = imgs.filter((img) => {
-            const sourceUrl = getMangaDexImageUrl(img);
+            const sourceUrl = getImageSourceUrl(img);
             return !!sourceUrl && isMangaDexImageUrl(sourceUrl);
         });
         if (sourceImgs.length === 0) return null;
@@ -178,7 +174,7 @@ const mangadexSourceAdapter = {
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
 
         const visibleCandidate = sourceImgs.find((img) => {
-            const sourceUrl = getMangaDexImageUrl(img);
+            const sourceUrl = getImageSourceUrl(img);
             const computedStyle = window.getComputedStyle(img);
             const rect = img.getBoundingClientRect();
             return (
@@ -194,7 +190,7 @@ const mangadexSourceAdapter = {
         if (visibleCandidate) return visibleCandidate;
 
         const unprocessedCandidate = sourceImgs.find((img) => {
-            const sourceUrl = getMangaDexImageUrl(img);
+            const sourceUrl = getImageSourceUrl(img);
             return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
         });
         if (unprocessedCandidate) return unprocessedCandidate;
@@ -203,13 +199,4 @@ const mangadexSourceAdapter = {
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
-}
-
-const existingMangaDexAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === MANGADEX_SOURCE_ID);
-if (existingMangaDexAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingMangaDexAdapterIndex] = mangadexSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(mangadexSourceAdapter);
-}
+registerSourceAdapter(mangadexSourceAdapter);

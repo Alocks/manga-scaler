@@ -8,12 +8,20 @@
       padding: 0;
       box-sizing: border-box;
     }
-    
+    :root {
+      --bg: #13151a;
+      --panel: #1d2129;
+      --text: #f2f5fb;
+      --muted: #a4adbc;
+      --accent: #ff7f32;
+      --accent-2: #59c5ff;
+      --border: #2c313d;
+    }
     body {
       width: 280px;
       font-family: system-ui, -apple-system, sans-serif;
-      background: #f5f5f5;
-      color: #333;
+      background: radial-gradient(circle at 20% -10%, #2a3140 0, var(--bg) 45%);
+      color: var(--text);
     }
     
     .popup-container {

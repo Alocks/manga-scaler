@@ -34,6 +34,7 @@ function logComixParseIssue(kind, url, extra = {}) {
 
 const comixSourceAdapter = {
     id: COMIX_SOURCE_ID,
+    mirrorSourceImagePresentation: false,
     supportsUrl(url) {
         const parsed = parseComixUrlSafely(url);
         return !!parsed && isComixHost(parsed.hostname);
@@ -68,24 +69,12 @@ const comixSourceAdapter = {
         };
     },
     getActiveContainer() {
-        const sourceImage = Array.from(document.querySelectorAll('img[src], img[data-src]'))
-            .find((img) => {
-                const sourceUrl = img.currentSrc || img.src || img.dataset.src;
-                const parsed = parseComixUrlSafely(sourceUrl);
-                return !!parsed && isComixImageHost(parsed.hostname);
-            });
-
-        if (!sourceImage) return null;
-
-        return sourceImage.closest('.rpage-main__inner')
-            || sourceImage.closest('.rpage-page')
-            || sourceImage.parentElement
-            || sourceImage;
+        return getGenericActiveContainer();
     },
     selectForegroundImage(container) {
         const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
         const sourceImgs = imgs.filter((img) => {
-            const sourceUrl = img.currentSrc || img.src || img.dataset.src;
+            const sourceUrl = getImageSourceUrl(img);
             const parsed = parseComixUrlSafely(sourceUrl);
             return !!parsed && isComixImageHost(parsed.hostname);
         });
@@ -100,7 +89,7 @@ const comixSourceAdapter = {
         if (visibleCandidate) return visibleCandidate;
 
         const unprocessedCandidate = sourceImgs.find((img) => {
-            const sourceUrl = img.currentSrc || img.src;
+            const sourceUrl = getImageSourceUrl(img);
             return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
         });
         if (unprocessedCandidate) return unprocessedCandidate;
@@ -109,13 +98,4 @@ const comixSourceAdapter = {
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
-}
-
-const existingComixAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === COMIX_SOURCE_ID);
-if (existingComixAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingComixAdapterIndex] = comixSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(comixSourceAdapter);
-}
+registerSourceAdapter(comixSourceAdapter);

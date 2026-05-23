@@ -31,13 +31,19 @@ const templateSiteSourceAdapter = {
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
+function registerSourceAdapter(adapter) {
+    if (!adapter || typeof adapter !== 'object') return;
+
+    if (!Array.isArray(window.NHScalerSourceAdapters)) {
+        window.NHScalerSourceAdapters = [];
+    }
+
+    const existingIndex = window.NHScalerSourceAdapters.findIndex((existingAdapter) => existingAdapter?.id === adapter.id);
+    if (existingIndex >= 0) {
+        window.NHScalerSourceAdapters[existingIndex] = adapter;
+    } else {
+        window.NHScalerSourceAdapters.push(adapter);
+    }
 }
 
-const existingTemplateAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === TEMPLATE_SOURCE_ID);
-if (existingTemplateAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingTemplateAdapterIndex] = templateSiteSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(templateSiteSourceAdapter);
-}
+registerSourceAdapter(templateSiteSourceAdapter);
