@@ -48,6 +48,10 @@ jobs:
         if: steps.commit_check.outputs.should_build == 'true'
         run: npm install anime4k-webgpu
 
+      - name: Build runtime bundle.js
+        if: steps.commit_check.outputs.should_build == 'true'
+        run: node tools/build-runtime-bundle.mjs
+
       - name: Build Anime4K.js and prepare for CRX Build
         if: steps.commit_check.outputs.should_build == 'true'
         run: |
