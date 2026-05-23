@@ -6,6 +6,16 @@ function isMangakakalotHost(hostname) {
     return typeof hostname === 'string' && /(^|\.)(mangakakalot|manganato)\.gg$/i.test(hostname);
 }
 
+function isMangakakalotImageHost(hostname) {
+    if (typeof hostname !== 'string' || !hostname) return false;
+    return (
+        isMangakakalotHost(hostname) ||
+        /^img-r\d+\.2xstorage\.com$/i.test(hostname) ||
+        /^imgs-\d+\.2xstorage\.com$/i.test(hostname) ||
+        /(^|\.)2xstorage\.com$/i.test(hostname)
+    );
+}
+
 function getMangakakalotReaderImages() {
     const selectors = [
         '.container-chapter-reader img[src], .container-chapter-reader img[data-src]',
@@ -105,6 +115,7 @@ const mangakakalotSourceAdapter = createStructuredSourceAdapter({
     parseImageUrlOverride(url, adapter) {
         const parsed = getBlobAwareParsedUrl(url, parseSourceUrlSafely);
         if (!parsed) return null;
+        if (!isMangakakalotImageHost(parsed.hostname)) return null;
 
         const page = getMangakakalotPageNumberFromDom(url);
         const chapterId = getMangakakalotChapterId();

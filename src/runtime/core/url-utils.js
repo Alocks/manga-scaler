@@ -50,9 +50,8 @@ function getReaderImageCandidates() {
     });
 }
 
-function selectReaderForegroundImage() {
-    const candidates = getReaderImageCandidates();
-    if (candidates.length === 0) return null;
+function selectVisibleOrUnprocessedImageCandidate(candidates) {
+    if (!Array.isArray(candidates) || candidates.length === 0) return null;
 
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
 
@@ -79,6 +78,11 @@ function selectReaderForegroundImage() {
     if (unprocessedCandidate) return unprocessedCandidate;
 
     return candidates[0];
+}
+
+function selectReaderForegroundImage() {
+    const candidates = getReaderImageCandidates();
+    return selectVisibleOrUnprocessedImageCandidate(candidates);
 }
 
 function isLikelyReaderContainerElement(element) {
@@ -135,14 +139,14 @@ function getGenericActiveContainer() {
 }
 
 function getActiveContainer(pageUrl = window.location.href) {
-    const genericContainer = getGenericActiveContainer();
-    if (genericContainer) return genericContainer;
-
     const activeAdapter = getActiveSourceAdapter(pageUrl);
     if (activeAdapter && typeof activeAdapter?.getActiveContainer === 'function') {
         const container = activeAdapter.getActiveContainer(pageUrl);
         if (container instanceof Element) return container;
     }
+
+    const genericContainer = getGenericActiveContainer();
+    if (genericContainer) return genericContainer;
 
     return document.querySelector('#image-container');
 }

@@ -7,7 +7,11 @@ function isMangaDexHost(hostname) {
 }
 
 function isMangaDexImageHost(hostname) {
-    return typeof hostname === 'string' && /(^|\.)uploads\.mangadex\.org$/i.test(hostname);
+    return typeof hostname === 'string' && /(^|\.)(uploads\.mangadex\.org|mangadex\.network)$/i.test(hostname);
+}
+
+function isMangaDexRasterImagePath(pathname) {
+    return typeof pathname === 'string' && /\.(avif|webp|jpe?g|png)$/i.test(pathname);
 }
 
 function toPositiveInt(value) {
@@ -24,7 +28,30 @@ function getMangaDexChapterId(pageUrl = window.location.href) {
 }
 
 function getMangaDexReaderImages() {
-    return Array.from(document.querySelectorAll('.md--reader-pages img[src], .md--reader-pages img[data-src]'));
+    const selectors = [
+        '.md--reader-pages img[src], .md--reader-pages img[data-src]',
+        '[class*="reader-pages"] img[src], [class*="reader-pages"] img[data-src]',
+        'img[src*="mangadex.network/data/"], img[data-src*="mangadex.network/data/"]'
+    ];
+
+    for (const selector of selectors) {
+        const images = Array.from(document.querySelectorAll(selector));
+        if (images.length > 0) return images;
+    }
+
+    return [];
+}
+
+function getMangaDexActiveContainer() {
+    const explicitContainer = document.querySelector('.md--reader-pages, [class*="reader-pages"]');
+    if (explicitContainer instanceof Element) return explicitContainer;
+
+    const readerImages = getMangaDexReaderImages();
+    if (readerImages.length > 0) {
+        return getReaderContainerFromImage(readerImages[0]);
+    }
+
+    return getGenericActiveContainer();
 }
 
 function getMangaDexPageNumberFromDom(imageUrl) {
@@ -80,9 +107,12 @@ const mangadexSourceAdapter = createStructuredSourceAdapter({
     id: 'mangadex',
     supportsHost: isMangaDexHost,
     isReaderPath: (pathname) => /^\/chapter\/[0-9a-f-]{32,36}(?:\/\d+)?\/?$/i.test(pathname),
+    getActiveContainer() {
+        return getMangaDexActiveContainer();
+    },
     parseImageUrlOverride(url, adapter) {
         const parsed = getBlobAwareParsedUrl(url, parseSourceUrlSafely);
-        if (!parsed || (!isMangaDexImageHost(parsed.hostname) && !isMangaDexHost(parsed.hostname))) return null;
+        if (!parsed || !isMangaDexImageHost(parsed.hostname) || !isMangaDexRasterImagePath(parsed.pathname)) return null;
 
         const chapterId = getMangaDexChapterId() || 'unknown';
         const page = getMangaDexPageNumberFromDom(url);
@@ -115,7 +145,7 @@ const mangadexSourceAdapter = createStructuredSourceAdapter({
             if (pageByAltPrefix) return pageByAltPrefix;
         }
 
-        return selectVisibleOrUnprocessedImage(sourceImgs);
+        return selectVisibleOrUnprocessedImageCandidate(sourceImgs);
     }
 });
 

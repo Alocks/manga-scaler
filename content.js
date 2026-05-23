@@ -7,12 +7,12 @@ const ALWAYS_LOG_LABELS = new Set([
     'process:upscale-time'
 ]);
 
-function log(label, data = {}) {
+function bootstrapLog(label, data = {}) {
     if (!DEBUG && !ALWAYS_LOG_LABELS.has(label)) return;
     console.log('[Manga Scaler]', label, { ts: new Date().toISOString(), ...data });
 }
 
-window.NHScalerLog = log;
+window.NHScalerLog = bootstrapLog;
 
 if (!document.querySelector('style[data-ai-scaler]')) {
     const style = document.createElement('style');
@@ -20,15 +20,6 @@ if (!document.querySelector('style[data-ai-scaler]')) {
     style.textContent = `
         #image-container {
             overflow: hidden;
-        }
-
-        .ai-canvas {
-            max-width: 100% !important;
-            max-height: 100vh !important;
-            width: auto !important;
-            height: auto !important;
-            display: block;
-            margin: auto;
         }
     `;
     document.head.appendChild(style);

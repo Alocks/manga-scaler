@@ -7,6 +7,10 @@ const PROCESSED_CACHE_STORE_NAME = 'images';
 const MIN_VALID_PROCESSED_BLOB_BYTES = 723000;
 let processedCacheDbPromise = null;
 
+function resetProcessedMemoryCache() {
+    processedCache.clear();
+}
+
 function getProcessedCacheEntry(cacheKey) {
     if (!processedCache.has(cacheKey)) return null;
 
@@ -204,12 +208,6 @@ async function setProcessedCacheBlob(url, blob, runtimeSettings = getRuntimePref
     });
 }
 
-async function deleteProcessedCacheBlob(url, runtimeSettings = getRuntimePreferenceSnapshot()) {
-    const cacheKey = getProcessedCacheKey(url, runtimeSettings);
-    if (!cacheKey) return false;
-    return deleteProcessedCacheEntryByKey(cacheKey);
-}
-
 function hasProcessedCacheEntry(url, runtimeSettings = getRuntimePreferenceSnapshot()) {
     const cacheKey = getProcessedCacheKey(url, runtimeSettings);
     if (!cacheKey || !processedCache.has(cacheKey)) return false;
@@ -224,10 +222,10 @@ function hasProcessedCacheEntry(url, runtimeSettings = getRuntimePreferenceSnaps
 }
 
 async function clearProcessedCache() {
-    processedCache.clear();
+    resetProcessedMemoryCache();
 
     const db = await openProcessedCacheDb();
-    if (!db) return false;
+    if (!db) return true;
 
     return new Promise((resolve) => {
         const tx = db.transaction(PROCESSED_CACHE_STORE_NAME, 'readwrite');

@@ -33,36 +33,6 @@ function logSourceParseIssue(issueStore, sourceId, kind, url, extra = {}) {
     }
 }
 
-function selectVisibleOrUnprocessedImage(sourceImgs) {
-    if (!Array.isArray(sourceImgs) || sourceImgs.length === 0) return null;
-
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-
-    const visibleCandidate = sourceImgs.find((img) => {
-        const sourceUrl = getImageSourceUrl(img);
-        const computedStyle = window.getComputedStyle(img);
-        const rect = img.getBoundingClientRect();
-        return (
-            !!sourceUrl &&
-            computedStyle.display !== 'none' &&
-            computedStyle.visibility !== 'hidden' &&
-            rect.width > 0 &&
-            rect.height > 0 &&
-            rect.bottom >= 0 &&
-            rect.top <= viewportHeight
-        );
-    });
-    if (visibleCandidate) return visibleCandidate;
-
-    const unprocessedCandidate = sourceImgs.find((img) => {
-        const sourceUrl = getImageSourceUrl(img);
-        return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
-    });
-    if (unprocessedCandidate) return unprocessedCandidate;
-
-    return sourceImgs[0];
-}
-
 function getSourceImagesByParser(container, parseImageUrlFn) {
     if (!(container instanceof Element) || typeof parseImageUrlFn !== 'function') return [];
 
@@ -109,14 +79,12 @@ function createStructuredSourceAdapter({
     parsePathname,
     buildParsedImageMeta,
     isImageHost,
-    mirrorSourceImagePresentation = false,
     issueStore,
     parseUrlFn = parseSourceUrlSafely,
     getActiveContainer = getGenericActiveContainer,
     selectForegroundImage,
     parseImageUrlOverride,
     getImageLoadCandidates,
-    supportsUrlOverride,
     isReaderPageUrlOverride,
     invalidPageIssue
 }) {
@@ -124,12 +92,6 @@ function createStructuredSourceAdapter({
 
     const adapter = {
         id,
-        mirrorSourceImagePresentation,
-        supportsUrl(url) {
-            if (typeof supportsUrlOverride === 'function') return !!supportsUrlOverride(url);
-            const parsed = parseUrlFn(url);
-            return !!parsed && typeof supportsHost === 'function' && supportsHost(parsed.hostname);
-        },
         isReaderPageUrl(url) {
             if (typeof isReaderPageUrlOverride === 'function') return !!isReaderPageUrlOverride(url);
             const parsed = parseUrlFn(url);
@@ -169,7 +131,7 @@ function createStructuredSourceAdapter({
             }
 
             const sourceImgs = getSourceImagesByParser(container, (sourceUrl) => adapter.parseImageUrl(sourceUrl));
-            return selectVisibleOrUnprocessedImage(sourceImgs);
+            return selectVisibleOrUnprocessedImageCandidate(sourceImgs);
         }
     };
 

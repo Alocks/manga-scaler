@@ -16,10 +16,6 @@ function createBaseEngineAdapter(overrides = {}) {
     };
 }
 
-function createEngineAdapter(overrides = {}) {
-    return createBaseEngineAdapter(overrides);
-}
-
 function createLibraryBackedEngineAdapter({
     getLibrary,
     isLibrarySupported,
@@ -39,7 +35,7 @@ function createLibraryBackedEngineAdapter({
         throw new Error('createLibraryBackedEngineAdapter requires upscale()');
     }
 
-    return createEngineAdapter({
+    return createBaseEngineAdapter({
         isSupported: () => {
             const lib = getLibrary();
             return !!lib && isLibrarySupported(lib);
@@ -67,9 +63,3 @@ function engineLibraryHasAnyFunctions(lib, functionNames = []) {
     if (!lib || typeof lib !== 'object' || !Array.isArray(functionNames)) return false;
     return functionNames.some((name) => typeof lib[name] === 'function');
 }
-
-// Expose shared engine helpers for backend-specific adapters.
-window.createBaseEngineAdapter = createBaseEngineAdapter;
-window.createEngineAdapter = createEngineAdapter;
-window.createLibraryBackedEngineAdapter = createLibraryBackedEngineAdapter;
-window.engineLibraryHasAnyFunctions = engineLibraryHasAnyFunctions;

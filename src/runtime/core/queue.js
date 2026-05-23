@@ -3,16 +3,82 @@
 const processedPageKeys = new Set();
 const inFlightPageKeys = new Set();
 let backgroundQueue = [];
-let backgroundProcessing = false;
 let backgroundQueueRunPromise = null;
+const queuedSourceUrls = new Set();
+const queuedPageKeyCounts = new Map();
 const seenPerformanceResourceUrls = new Set();
+const BACKGROUND_QUEUE_YIELD_MS = 10;
+let backgroundQueueResetVersion = 0;
+
+function isBackgroundQueueRunning() {
+    return !!backgroundQueueRunPromise;
+}
+
+function runQueueTaskSafely(promise, task, extra = {}) {
+    if (!promise || typeof promise.catch !== 'function') return;
+    promise.catch((error) => {
+        log('bg-queue:task-error', {
+            task,
+            error: String(error),
+            ...extra
+        });
+    });
+}
+
+function resetBackgroundQueueState() {
+    backgroundQueueResetVersion++;
+    const hasActiveRun = isBackgroundQueueRunning();
+
+    processedPageKeys.clear();
+    inFlightPageKeys.clear();
+    clearBackgroundQueue();
+    seenPerformanceResourceUrls.clear();
+
+    if (!hasActiveRun) {
+        backgroundQueueRunPromise = null;
+    }
+}
+
+function clearBackgroundQueue() {
+    backgroundQueue = [];
+    queuedSourceUrls.clear();
+    queuedPageKeyCounts.clear();
+}
+
+function enqueueBackgroundQueueUrl(sourceUrl) {
+    backgroundQueue.push(sourceUrl);
+    queuedSourceUrls.add(sourceUrl);
+
+    const pageKey = getSourcePageKey(sourceUrl);
+    if (!pageKey) return;
+    queuedPageKeyCounts.set(pageKey, (queuedPageKeyCounts.get(pageKey) || 0) + 1);
+}
+
+function dequeueBackgroundQueueUrlAt(index) {
+    if (index < 0 || index >= backgroundQueue.length) return null;
+
+    const [sourceUrl] = backgroundQueue.splice(index, 1);
+    queuedSourceUrls.delete(sourceUrl);
+
+    const pageKey = getSourcePageKey(sourceUrl);
+    if (pageKey) {
+        const nextCount = (queuedPageKeyCounts.get(pageKey) || 0) - 1;
+        if (nextCount > 0) {
+            queuedPageKeyCounts.set(pageKey, nextCount);
+        } else {
+            queuedPageKeyCounts.delete(pageKey);
+        }
+    }
+
+    return sourceUrl;
+}
 
 function getNextBackgroundQueueIndex() {
     if (backgroundQueue.length === 0) return -1;
 
     let bestIndex = 0;
-    let bestPage = getSourcePageNumber(backgroundQueue[0]);
-    let bestRank = bestPage == null ? Number.POSITIVE_INFINITY : bestPage;
+    const firstPage = getSourcePageNumber(backgroundQueue[0]);
+    let bestRank = firstPage == null ? Number.POSITIVE_INFINITY : firstPage;
 
     for (let i = 1; i < backgroundQueue.length; i++) {
         const page = getSourcePageNumber(backgroundQueue[i]);
@@ -20,11 +86,30 @@ function getNextBackgroundQueueIndex() {
         if (rank < bestRank) {
             bestRank = rank;
             bestIndex = i;
-            bestPage = page;
         }
     }
 
     return bestIndex;
+}
+
+function getActiveForegroundSourceUrl() {
+    const activeContainer = getActiveContainer();
+    const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
+    return activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
+}
+
+function getQueueConflictReason(url, runtimeSettings) {
+    const activeUrl = getActiveForegroundSourceUrl();
+    if (url === activeUrl) return 'active-image';
+
+    const key = getSourcePageKey(url);
+    if (key && processedPageKeys.has(key)) return 'page-already-processed';
+    if (key && inFlightPageKeys.has(key)) return 'page-in-flight';
+    if (key && queuedPageKeyCounts.has(key)) return 'page-already-queued';
+    if (hasProcessedCacheEntry(url, runtimeSettings)) return 'memory-cache-hit';
+    if (queuedSourceUrls.has(url)) return 'url-already-queued';
+
+    return null;
 }
 
 function queueBackgroundIfEligible(url, source) {
@@ -49,37 +134,14 @@ function queueBackgroundIfEligible(url, source) {
         return false;
     }
 
-    const activeContainer = getActiveContainer();
-    const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
-    if (url === activeUrl) {
-        logQueueEvent('bg-queue:skip', url, { source, reason: 'active-image' });
-        return false;
-    }
-    const key = getSourcePageKey(url);
-    if (key && processedPageKeys.has(key)) {
-        logQueueEvent('bg-queue:skip', url, { source, reason: 'page-already-processed' });
-        return false;
-    }
-    if (key && inFlightPageKeys.has(key)) {
-        logQueueEvent('bg-queue:skip', url, { source, reason: 'page-in-flight' });
-        return false;
-    }
-    if (key && backgroundQueue.some(u => getSourcePageKey(u) === key)) {
-        logQueueEvent('bg-queue:skip', url, { source, reason: 'page-already-queued' });
-        return false;
-    }
-    if (hasProcessedCacheEntry(url, runtimeSettings)) {
-        logQueueEvent('bg-queue:skip', url, { source, reason: 'memory-cache-hit' });
-        return false;
-    }
-    if (backgroundQueue.includes(url)) {
-        logQueueEvent('bg-queue:skip', url, { source, reason: 'url-already-queued' });
+    const conflictReason = getQueueConflictReason(url, runtimeSettings);
+    if (conflictReason) {
+        logQueueEvent('bg-queue:skip', url, { source, reason: conflictReason });
         return false;
     }
 
     logQueueEvent('bg-queue:candidate', url, { source });
-    preprocessBackgroundImage(url);
+    runQueueTaskSafely(preprocessBackgroundImage(url), 'preprocess', { sourceUrl: url, source });
     return true;
 }
 
@@ -100,39 +162,31 @@ async function preprocessBackgroundImage(sourceUrl) {
         return;
     }
 
-    if (backgroundQueue.includes(sourceUrl)) {
-        logQueueEvent('bg-queue:skip', sourceUrl, { reason: 'url-already-queued-late' });
+    const conflictReason = getQueueConflictReason(sourceUrl, runtimeSettings);
+    if (conflictReason) {
+        logQueueEvent('bg-queue:skip', sourceUrl, { reason: `${conflictReason}-late` });
         return;
     }
 
-    const activeContainer = getActiveContainer();
-    const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
-    if (sourceUrl === activeUrl) {
-        logQueueEvent('bg-process:skip-foreground', sourceUrl);
-        return;
-    }
+    enqueueBackgroundQueueUrl(sourceUrl);
+    logQueueEvent('bg-queue:enqueued', sourceUrl);
 
-    if (!backgroundQueue.includes(sourceUrl)) {
-        backgroundQueue.push(sourceUrl);
-        logQueueEvent('bg-queue:enqueued', sourceUrl);
-    }
-
-    if (!backgroundProcessing) {
+    if (!isBackgroundQueueRunning()) {
         log('bg-queue:kickoff', { queueSize: backgroundQueue.length });
-        processBackgroundQueue();
+        runQueueTaskSafely(processBackgroundQueue(), 'process-loop');
     }
 }
 
 async function processBackgroundQueue() {
-    if (backgroundQueueRunPromise) {
+    if (isBackgroundQueueRunning()) {
         return backgroundQueueRunPromise;
     }
 
     backgroundQueueRunPromise = (async () => {
+    const runResetVersion = backgroundQueueResetVersion;
+
     if (!isReaderPageUrl(window.location.href)) {
-        backgroundQueue = [];
-        backgroundProcessing = false;
+        clearBackgroundQueue();
         return;
     }
     if (!isForegroundTab()) {
@@ -140,24 +194,30 @@ async function processBackgroundQueue() {
         return;
     }
 
-    if (backgroundProcessing) return;
-
-    backgroundProcessing = true;
-
     await Promise.all([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleReadyPromise]);
+
+    if (runResetVersion !== backgroundQueueResetVersion) {
+        log('bg-queue:cancelled', { reason: 'reset-before-start' });
+        return;
+    }
 
     if (backgroundQueue.length === 0) return;
 
     const queueRuntimeSettings = getRuntimePreferenceSnapshot();
     if (getEffectiveBackend(queueRuntimeSettings) === 'off') {
         log('bg-queue:cleared', { reason: 'backend-off', queueSize: backgroundQueue.length });
-        backgroundQueue = [];
+        clearBackgroundQueue();
         return;
     }
 
     log('bg-queue:start', { queueSize: backgroundQueue.length });
 
     while (backgroundQueue.length > 0) {
+        if (runResetVersion !== backgroundQueueResetVersion) {
+            log('bg-queue:cancelled', { reason: 'reset-mid-run', queueSize: backgroundQueue.length });
+            break;
+        }
+
         if (!isForegroundTab()) {
             log('bg-queue:paused', { reason: 'tab-hidden-mid-run', queueSize: backgroundQueue.length });
             break;
@@ -165,7 +225,10 @@ async function processBackgroundQueue() {
 
         const nextIndex = getNextBackgroundQueueIndex();
         if (nextIndex < 0) break;
-        const [sourceUrl] = backgroundQueue.splice(nextIndex, 1);
+        const sourceUrl = dequeueBackgroundQueueUrlAt(nextIndex);
+        if (!sourceUrl) {
+            continue;
+        }
         logQueueEvent('bg-queue:dequeued', sourceUrl, { nextIndex });
 
         const itemRuntimeSettings = getRuntimePreferenceSnapshot();
@@ -179,8 +242,7 @@ async function processBackgroundQueue() {
             continue;
         }
 
-        const activeImg = getActiveContainer()?.querySelector('img');
-        const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
+        const activeUrl = getActiveForegroundSourceUrl();
         if (sourceUrl === activeUrl) {
             logQueueEvent('bg-process:skip-now-foreground', sourceUrl);
             continue;
@@ -195,6 +257,11 @@ async function processBackgroundQueue() {
 
         try {
             const tempImg = await loadSourceImage(sourceUrl);
+
+            if (runResetVersion !== backgroundQueueResetVersion) {
+                logQueueEvent('bg-process:cancelled-after-load', sourceUrl);
+                continue;
+            }
 
             const sourceWidth = tempImg.naturalWidth || tempImg.width;
             const sourceHeight = tempImg.naturalHeight || tempImg.height;
@@ -244,6 +311,11 @@ async function processBackgroundQueue() {
 
             const processedBlob = await canvasToBlob(bgCanvas);
 
+            if (runResetVersion !== backgroundQueueResetVersion) {
+                logQueueEvent('bg-process:cancelled-before-cache', sourceUrl);
+                continue;
+            }
+
             if (!isForegroundTab()) {
                 logQueueEvent('bg-process:skip-hidden-before-cache', sourceUrl);
                 continue;
@@ -260,7 +332,7 @@ async function processBackgroundQueue() {
             if (pageKey) inFlightPageKeys.delete(pageKey);
         }
 
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise(resolve => setTimeout(resolve, BACKGROUND_QUEUE_YIELD_MS));
     }
 
     })();
@@ -268,7 +340,6 @@ async function processBackgroundQueue() {
     try {
         return await backgroundQueueRunPromise;
     } finally {
-        backgroundProcessing = false;
         backgroundQueueRunPromise = null;
         log('bg-queue:idle', { queueSize: backgroundQueue.length });
     }
@@ -279,9 +350,7 @@ function findAndProcessBackgroundImages() {
     if (!isForegroundTab()) return;
 
     const allImages = Array.from(document.querySelectorAll('img[src], img[data-src]'));
-    const activeContainer = getActiveContainer();
-    const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
+    const activeUrl = getActiveForegroundSourceUrl();
 
     let scannedSourceImages = 0;
     let queued = 0;

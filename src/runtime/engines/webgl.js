@@ -13,8 +13,8 @@ function getWebGlLibrary() {
 }
 
 function isWebGlLibrarySupported(lib) {
-    if (typeof window.engineLibraryHasAnyFunctions === 'function') {
-        return window.engineLibraryHasAnyFunctions(lib, WEBGL_UPSCALER_CTOR_NAMES);
+    if (typeof engineLibraryHasAnyFunctions === 'function') {
+        return engineLibraryHasAnyFunctions(lib, WEBGL_UPSCALER_CTOR_NAMES);
     }
     return WEBGL_UPSCALER_CTOR_NAMES.some((name) => typeof lib?.[name] === 'function');
 }
@@ -103,7 +103,49 @@ function resolveWebGlFallbackScale(runtimeSettings = getRuntimePreferenceSnapsho
     return presetScaleMap[settings.selectedSimplePreset] || 2;
 }
 
-function upscaleWith2dFallback(tempImg, canvas, scale) {
+function createResizeCanvas(width, height) {
+    if (typeof OffscreenCanvas === 'function') {
+        return new OffscreenCanvas(width, height);
+    }
+
+    const elementCanvas = document.createElement('canvas');
+    elementCanvas.width = width;
+    elementCanvas.height = height;
+    return elementCanvas;
+}
+
+async function tryImageBitmapHighQualityResize(tempImg, canvas, targetWidth, targetHeight) {
+    if (typeof createImageBitmap !== 'function') return false;
+
+    let bitmap = null;
+    try {
+        bitmap = await createImageBitmap(tempImg, {
+            resizeWidth: targetWidth,
+            resizeHeight: targetHeight,
+            resizeQuality: 'high'
+        });
+
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+        if (!ctx) return false;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.clearRect(0, 0, targetWidth, targetHeight);
+        ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+        return true;
+    } catch {
+        return false;
+    } finally {
+        if (bitmap && typeof bitmap.close === 'function') {
+            bitmap.close();
+        }
+    }
+}
+
+async function upscaleWith2dFallback(tempImg, canvas, scale) {
     const sourceWidth = tempImg.naturalWidth || tempImg.width;
     const sourceHeight = tempImg.naturalHeight || tempImg.height;
 
@@ -127,22 +169,37 @@ function upscaleWith2dFallback(tempImg, canvas, scale) {
     const targetWidth = Math.max(1, Math.min(maxCanvasDimension, Math.floor(sourceWidth * effectiveScale)));
     const targetHeight = Math.max(1, Math.min(maxCanvasDimension, Math.floor(sourceHeight * effectiveScale)));
 
+    const usedImageBitmapResize = await tryImageBitmapHighQualityResize(tempImg, canvas, targetWidth, targetHeight);
+    if (usedImageBitmapResize) {
+        return;
+    }
+
+    const intermediateCanvas = createResizeCanvas(targetWidth, targetHeight);
+    const intermediateCtx = intermediateCanvas.getContext('2d', { alpha: true, desynchronized: true });
+    if (!intermediateCtx) {
+        throw new Error('2D fallback failed to acquire resize context');
+    }
+
+    intermediateCtx.imageSmoothingEnabled = true;
+    intermediateCtx.imageSmoothingQuality = 'high';
+    intermediateCtx.clearRect(0, 0, targetWidth, targetHeight);
+    intermediateCtx.drawImage(tempImg, 0, 0, targetWidth, targetHeight);
+
     canvas.width = targetWidth;
     canvas.height = targetHeight;
-
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
         throw new Error(`2D fallback canvas size rejected: ${targetWidth}x${targetHeight}`);
     }
 
-    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-    if (!ctx) {
-        throw new Error('2D fallback failed to acquire canvas context');
+    const outputCtx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    if (!outputCtx) {
+        throw new Error('2D fallback failed to acquire output context');
     }
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.clearRect(0, 0, targetWidth, targetHeight);
-    ctx.drawImage(tempImg, 0, 0, targetWidth, targetHeight);
+    outputCtx.imageSmoothingEnabled = true;
+    outputCtx.imageSmoothingQuality = 'high';
+    outputCtx.clearRect(0, 0, targetWidth, targetHeight);
+    outputCtx.drawImage(intermediateCanvas, 0, 0, targetWidth, targetHeight);
 }
 
 async function runAnime4KWebGl(tempImg, canvas, runtimeSettings = getRuntimePreferenceSnapshot()) {
@@ -165,7 +222,7 @@ async function runAnime4KWebGl(tempImg, canvas, runtimeSettings = getRuntimePref
             sourceHeight: tempImg.naturalHeight || tempImg.height,
             fallbackScale
         });
-        upscaleWith2dFallback(tempImg, canvas, fallbackScale);
+        await upscaleWith2dFallback(tempImg, canvas, fallbackScale);
         return `2D_FALLBACK_${fallbackScale}X`;
     } finally {
         engine.detachSource();
@@ -181,7 +238,7 @@ async function runAnime4KWebGl(tempImg, canvas, runtimeSettings = getRuntimePref
         sourceHeight: tempImg.naturalHeight || tempImg.height,
         fallbackScale
     });
-    upscaleWith2dFallback(tempImg, canvas, fallbackScale);
+    await upscaleWith2dFallback(tempImg, canvas, fallbackScale);
     return `2D_FALLBACK_${fallbackScale}X`;
 }
 

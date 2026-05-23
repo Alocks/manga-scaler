@@ -78,7 +78,7 @@ function applyRuntimePreferenceStorageChanges(changes) {
     const hasWebGpuModelChange = !!changes[WEBGPU_MODEL_KEY];
     const hasWebGpuScaleChange = !!changes[WEBGPU_SCALE_KEY];
     if (!hasPresetChange && !hasBackendChange && !hasWebGpuModelChange && !hasWebGpuScaleChange) {
-        return { didChange: false, changed: { preset: false, backend: false, webgpuModel: false, webgpuScale: false } };
+        return false;
     }
 
     let didChange = false;
@@ -115,15 +115,7 @@ function applyRuntimePreferenceStorageChanges(changes) {
         }
     }
 
-    return {
-        didChange,
-        changed: {
-            preset: hasPresetChange,
-            backend: hasBackendChange,
-            webgpuModel: hasWebGpuModelChange,
-            webgpuScale: hasWebGpuScaleChange
-        }
-    };
+    return didChange;
 }
 
 function loadSimplePresetPreference() {

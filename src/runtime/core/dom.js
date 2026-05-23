@@ -3,7 +3,6 @@
 const IMAGE_LOAD_TIMEOUT_MS = 10000;
 const HARD_MAX_CANVAS_DIMENSION = 16384;
 let cachedMaxCanvasDimension = null;
-const NH_SCALER_CANVAS_MARK = '__nhScalerCanvas__';
 
 function getMaxCanvasDimension() {
     if (cachedMaxCanvasDimension !== null) return cachedMaxCanvasDimension;
@@ -21,16 +20,6 @@ function canCanvasSupportDimensions(width, height) {
 
     const max = getMaxCanvasDimension();
     return width <= max && height <= max;
-}
-
-function hideOriginal(img) {
-    img.style.setProperty('display', 'none', 'important');
-    img.style.setProperty('visibility', 'hidden', 'important');
-}
-
-function showOriginal(img) {
-    img.style.removeProperty('display');
-    img.style.removeProperty('visibility');
 }
 
 function getImageSourceUrl(img) {
@@ -51,6 +40,12 @@ function rememberOriginalImageState(img, sourceUrl) {
     }
     if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalSizes')) {
         img.dataset.aiOriginalSizes = img.getAttribute('sizes') || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalImageRendering')) {
+        img.dataset.aiOriginalImageRendering = img.style.getPropertyValue('image-rendering') || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalImageRenderingPriority')) {
+        img.dataset.aiOriginalImageRenderingPriority = img.style.getPropertyPriority('image-rendering') || '';
     }
 }
 
@@ -90,6 +85,14 @@ function restoreOriginalImage(img) {
         img.src = originalSrc;
     }
 
+    const originalImageRendering = img.dataset.aiOriginalImageRendering || '';
+    const originalImageRenderingPriority = img.dataset.aiOriginalImageRenderingPriority || '';
+    if (originalImageRendering) {
+        img.style.setProperty('image-rendering', originalImageRendering, originalImageRenderingPriority);
+    } else {
+        img.style.removeProperty('image-rendering');
+    }
+
     img.dataset.aiProcessed = 'false';
     delete img.dataset.aiProcessedSrc;
     delete img.dataset.aiProcessingSrc;
@@ -112,18 +115,10 @@ function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
 
     img.removeAttribute('srcset');
     img.removeAttribute('sizes');
+    img.style.setProperty('image-rendering', '-webkit-optimize-contrast');
     img.src = objectUrl;
 
     return objectUrl;
-}
-
-function isInjectedCanvas(node) {
-    return node instanceof HTMLCanvasElement && node[NH_SCALER_CANVAS_MARK] === true;
-}
-
-function getInjectedCanvases(root) {
-    if (!(root instanceof Element)) return [];
-    return Array.from(root.querySelectorAll('canvas')).filter((canvas) => isInjectedCanvas(canvas));
 }
 
 function disableUpscalingForContainer(container, activeImg = null) {
@@ -137,114 +132,6 @@ function disableUpscalingForContainer(container, activeImg = null) {
     const imgs = container.querySelectorAll('img');
     for (const img of imgs) {
         restoreOriginalImage(img);
-    }
-
-    const canvases = getInjectedCanvases(container);
-    for (const canvas of canvases) {
-        canvas.remove();
-    }
-}
-
-function syncCanvasPresentation(canvas, img) {
-    if (!(canvas instanceof HTMLCanvasElement) || !(img instanceof HTMLImageElement)) return;
-
-    const activeAdapter = typeof getActiveSourceAdapter === 'function' ? getActiveSourceAdapter() : null;
-    const mirrorSourcePresentation = activeAdapter?.mirrorSourceImagePresentation !== false;
-
-    canvas[NH_SCALER_CANVAS_MARK] = true;
-
-    if (mirrorSourcePresentation) {
-        canvas.style.width = img.style.width || '';
-        canvas.style.height = img.style.height || '';
-        canvas.style.maxWidth = img.style.maxWidth || '';
-        canvas.style.maxHeight = img.style.maxHeight || '';
-        canvas.style.minWidth = img.style.minWidth || '';
-        canvas.style.minHeight = img.style.minHeight || '';
-        canvas.style.objectFit = img.style.objectFit || '';
-        canvas.style.objectPosition = img.style.objectPosition || '';
-    } else {
-        canvas.style.removeProperty('width');
-        canvas.style.removeProperty('height');
-        canvas.style.removeProperty('max-width');
-        canvas.style.removeProperty('max-height');
-        canvas.style.removeProperty('min-width');
-        canvas.style.removeProperty('min-height');
-        canvas.style.removeProperty('object-fit');
-        canvas.style.removeProperty('object-position');
-    }
-}
-
-function getCanvasForImage(img) {
-    if (!(img instanceof HTMLImageElement)) return null;
-    const nextSibling = img.nextElementSibling;
-    if (isInjectedCanvas(nextSibling)) {
-        return nextSibling;
-    }
-
-    const previousSibling = img.previousElementSibling;
-    if (isInjectedCanvas(previousSibling)) {
-        return previousSibling;
-    }
-
-    const parent = img.parentElement;
-    if (!parent) return null;
-
-    const canvases = getInjectedCanvases(parent);
-    return canvases.length === 1 ? canvases[0] : null;
-}
-
-function ensureCanvas(parent, sourceImg) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 0;
-    canvas.height = 0;
-    canvas[NH_SCALER_CANVAS_MARK] = true;
-    if (sourceImg instanceof HTMLImageElement) {
-        syncCanvasPresentation(canvas, sourceImg);
-    }
-
-    return canvas;
-}
-
-function hasRenderedCanvasForSource(img, canvas, sourceUrl) {
-    return (
-        !!canvas &&
-        canvas.dataset.aiSourceUrl === sourceUrl &&
-        canvas.width > 0 &&
-        canvas.height > 0 &&
-        img.dataset.aiProcessedSrc === sourceUrl
-    );
-}
-
-function reconcile(container) {
-    if (getEffectiveBackend() === 'off') {
-        const activeImg = selectForegroundImage(container);
-        if (activeImg && (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc)) {
-            disableUpscalingForContainer(container, activeImg);
-        }
-        return;
-    }
-
-    const activeImg = selectForegroundImage(container);
-    const imgs = container.querySelectorAll('img');
-    for (const img of imgs) {
-        const sourceUrl = getImageSourceUrl(img);
-        if (!sourceUrl) continue;
-
-        const parent = img.parentElement;
-        if (!parent) continue;
-
-        const canvas = getCanvasForImage(img);
-        if (hasRenderedCanvasForSource(img, canvas, sourceUrl)) {
-            if (img === activeImg) {
-                syncCanvasPresentation(canvas, img);
-                canvas.style.display = 'block';
-                canvas.style.visibility = 'visible';
-                hideOriginal(img);
-            } else {
-                canvas.style.display = 'none';
-                canvas.style.visibility = 'hidden';
-            }
-        }
     }
 }
 

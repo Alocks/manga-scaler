@@ -6,22 +6,38 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const repoRoot = resolve(__dirname, '..');
 
-const runtimeSourceFiles = [
-  'src/runtime/config.js',
+const runtimeCoreFiles = [
+  'src/runtime/core/config.js',
+  'src/runtime/core/url-utils.js',
+  'src/runtime/core/cache.js'
+];
+
+const sourceAdapterFiles = [
   'src/runtime/sources/base_source.js',
   'src/runtime/sources/nhentai.js',
   'src/runtime/sources/comix.js',
   'src/runtime/sources/mangadex.js',
-  'src/runtime/sources/mangakakalot_manganato.js',
-  'src/runtime/url-utils.js',
-  'src/runtime/cache.js',
-  'src/runtime/adapters/engines/base_engine.js',
-  'src/runtime/adapters/engines/webgl.js',
-  'src/runtime/adapters/engines/webgpu.js',
-  'src/runtime/engine.js',
-  'src/runtime/dom.js',
-  'src/runtime/queue.js',
-  'src/runtime/orchestrator.js'
+  'src/runtime/sources/mangakakalot_manganato.js'
+];
+
+const engineAdapterFiles = [
+  'src/runtime/engines/base_engine.js',
+  'src/runtime/engines/webgl.js',
+  'src/runtime/engines/webgpu.js'
+];
+
+const runtimePipelineFiles = [
+  'src/runtime/core/engine.js',
+  'src/runtime/core/dom.js',
+  'src/runtime/core/queue.js',
+  'src/runtime/core/orchestrator.js'
+];
+
+const runtimeSourceFiles = [
+  ...runtimeCoreFiles,
+  ...sourceAdapterFiles,
+  ...engineAdapterFiles,
+  ...runtimePipelineFiles
 ];
 
 const outputFile = 'src/runtime/runtime.bundle.js';
