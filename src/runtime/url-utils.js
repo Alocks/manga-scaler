@@ -42,7 +42,102 @@ function getSourcePageNumber(url) {
     return getSourceAdapterForImageUrl(url)?.parsed?.page || null;
 }
 
+function getReaderImageCandidates() {
+    const images = Array.from(document.querySelectorAll('img[src], img[data-src]'));
+    return images.filter((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        return !!sourceUrl && isSourceImageUrl(sourceUrl) && !img.closest('header, nav, footer');
+    });
+}
+
+function selectReaderForegroundImage() {
+    const candidates = getReaderImageCandidates();
+    if (candidates.length === 0) return null;
+
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+    const visibleCandidate = candidates.find((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        const computedStyle = window.getComputedStyle(img);
+        const rect = img.getBoundingClientRect();
+        return (
+            !!sourceUrl &&
+            computedStyle.display !== 'none' &&
+            computedStyle.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.bottom >= 0 &&
+            rect.top <= viewportHeight
+        );
+    });
+    if (visibleCandidate) return visibleCandidate;
+
+    const unprocessedCandidate = candidates.find((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        return !!sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
+    });
+    if (unprocessedCandidate) return unprocessedCandidate;
+
+    return candidates[0];
+}
+
+function isLikelyReaderContainerElement(element) {
+    if (!(element instanceof Element)) return false;
+    if (element === document.body || element === document.documentElement) return false;
+
+    if (element.id === 'image-container') return true;
+
+    const className = typeof element.className === 'string' ? element.className : '';
+    if (/\b(md--reader-pages|md--page|rpage-main__inner|rpage-page)\b/i.test(className)) return true;
+
+    const idName = typeof element.id === 'string' ? element.id : '';
+    return /(?:reader|page|image|viewer)/i.test(idName) && /(?:reader|page|image|viewer)/i.test(className);
+}
+
+function getReaderContainerFromImage(img) {
+    if (!(img instanceof HTMLImageElement)) return null;
+
+    let current = img.parentElement;
+    let fallback = current;
+
+    while (current && current !== document.body) {
+        if (isLikelyReaderContainerElement(current)) {
+            return current;
+        }
+
+        const parent = current.parentElement;
+        if (!parent) break;
+
+        if (current.tagName === 'A' || current.tagName === 'PICTURE' || current.tagName === 'FIGURE') {
+            current = parent;
+            continue;
+        }
+
+        if (current.querySelectorAll('img').length === 1 && current.contains(img)) {
+            fallback = current;
+            if (parent.children.length > 1) {
+                return current;
+            }
+        }
+
+        current = parent;
+    }
+
+    return fallback || img.parentElement || img;
+}
+
+function getGenericActiveContainer() {
+    const foregroundImage = selectReaderForegroundImage();
+    if (!foregroundImage) return null;
+
+    const container = getReaderContainerFromImage(foregroundImage);
+    return container instanceof Element ? container : null;
+}
+
 function getActiveContainer(pageUrl = window.location.href) {
+    const genericContainer = getGenericActiveContainer();
+    if (genericContainer) return genericContainer;
+
     const activeAdapter = getActiveSourceAdapter(pageUrl);
     if (activeAdapter && typeof activeAdapter?.getActiveContainer === 'function') {
         const container = activeAdapter.getActiveContainer(pageUrl);

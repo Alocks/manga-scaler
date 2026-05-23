@@ -10,6 +10,8 @@ const BOOT_DIAGNOSTICS_PHASE_READY = 'ready';
 let jobCounter = 0;
 const CLEAR_CACHE_MESSAGE_TYPE = 'manga-scaler:clear-cache';
 const GET_DIAGNOSTICS_MESSAGE_TYPE = 'manga-scaler:get-diagnostics';
+let runtimeMutationSuppressed = false;
+let runtimeSettingsFlushTimeoutId = null;
 
 function log(label, data = {}) {
     if (typeof window.NHScalerLog === 'function') {
@@ -71,6 +73,10 @@ function isForegroundTab() {
     return document.visibilityState === 'visible' && !document.hidden;
 }
 
+function isRuntimeMutationSuppressed() {
+    return runtimeMutationSuppressed;
+}
+
 function getRequestedScaleForBackend(runtimeSettings) {
     const backend = getEffectiveBackend(runtimeSettings);
     const rawScale = backend === 'webgpu'
@@ -120,7 +126,7 @@ function logQueueEvent(label, sourceUrl, extra = {}) {
 }
 
 function isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent) {
-    const latestSrc = img.currentSrc || img.src;
+    const latestSrc = getImageSourceUrl(img);
     return (
         !isForegroundTab() ||
         img.dataset.aiJobId !== jobId ||
@@ -256,14 +262,14 @@ async function processCurrentImage(container) {
     const img = selectForegroundImage(container);
     if (!img) return;
 
-    const sourceUrl = img.currentSrc || img.src;
+    const sourceUrl = getImageSourceUrl(img);
     if (!sourceUrl) return;
     if (img.dataset.aiSkipSource === sourceUrl) return;
 
     const runtimeSettings = getRuntimePreferenceSnapshot();
 
     if (getEffectiveBackend(runtimeSettings) === 'off') {
-        disableUpscalingForContainer(container, sourceUrl);
+        disableUpscalingForContainer(container, img);
         return;
     }
 
@@ -283,7 +289,7 @@ async function processCurrentImage(container) {
     ) {
         img.dataset.aiSkipSource = sourceUrl;
         img.dataset.aiProcessed = 'false';
-        disableUpscalingForContainer(container, sourceUrl);
+        disableUpscalingForContainer(container);
         log('process:skip-oversize', {
             sourceUrl,
             page: getSourcePageNumber(sourceUrl),
@@ -296,39 +302,14 @@ async function processCurrentImage(container) {
         return;
     }
 
-    const existingCanvas = getCanvasForImage(img);
-
-    if (existingCanvas && existingCanvas.dataset.aiSourceUrl && existingCanvas.dataset.aiSourceUrl !== sourceUrl) {
-        existingCanvas.remove();
-    }
-
-    const currentCanvas = getCanvasForImage(img);
-    if (hasRenderedCanvasForSource(img, currentCanvas, sourceUrl)) {
-        syncCanvasPresentation(currentCanvas, img);
-        reconcile(container);
+    if (img.dataset.aiProcessedSrc === sourceUrl && img.dataset.aiBlobUrl) {
         return;
     }
 
     const cachedBlob = await getProcessedCacheBlob(sourceUrl, runtimeSettings);
     if (cachedBlob) {
-        let canvas = ensureCanvas(parent, img);
-
-        try {
-            const bitmap = await createImageBitmap(cachedBlob);
-            const ctx = canvas.getContext('2d');
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            ctx.drawImage(bitmap, 0, 0);
-
-            img.dataset.aiProcessed = 'true';
-            img.dataset.aiProcessedSrc = sourceUrl;
-            canvas.dataset.aiSourceUrl = sourceUrl;
-            reconcile(container);
-            return;
-        } catch (err) {
-            await deleteProcessedCacheBlob(sourceUrl, runtimeSettings);
-            log('process:cache-restore-failed', { sourceUrl, error: String(err) });
-        }
+        applyProcessedBlobToImage(img, sourceUrl, cachedBlob);
+        return;
     }
 
     if (img.dataset.aiProcessingSrc === sourceUrl) return;
@@ -344,7 +325,7 @@ async function processCurrentImage(container) {
     }
     log('process:start', { sourceUrl, page, jobId, backend: getEffectiveBackend(runtimeSettings) });
 
-    let canvas = ensureCanvas(parent, img);
+    const canvas = ensureCanvas(parent, img);
 
     try {
         const tempImg = await loadSourceImage(sourceUrl);
@@ -357,7 +338,7 @@ async function processCurrentImage(container) {
             img.dataset.aiSkipSource = sourceUrl;
             img.dataset.aiProcessed = 'false';
             delete img.dataset.aiProcessingSrc;
-            disableUpscalingForContainer(container, sourceUrl);
+            disableUpscalingForContainer(container);
             log('process:skip-oversize', {
                 sourceUrl,
                 page,
@@ -371,7 +352,7 @@ async function processCurrentImage(container) {
             return;
         }
 
-        const latestSrc = img.currentSrc || img.src;
+        const latestSrc = getImageSourceUrl(img);
         if (isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent)) {
             log('process:abort-stale', { sourceUrl, latestSrc, jobId, activeJobId: img.dataset.aiJobId, phase: 'before-upscale' });
             delete img.dataset.aiProcessingSrc;
@@ -390,7 +371,7 @@ async function processCurrentImage(container) {
             model: runInfo.model,
         });
 
-        const latestAfterUpscale = img.currentSrc || img.src;
+        const latestAfterUpscale = getImageSourceUrl(img);
         if (isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent)) {
             log('process:abort-stale', {
                 sourceUrl,
@@ -413,7 +394,7 @@ async function processCurrentImage(container) {
         const processedBlob = await canvasToBlob(canvas);
 
         if (isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent)) {
-            const latestAfterBlob = img.currentSrc || img.src;
+            const latestAfterBlob = getImageSourceUrl(img);
             log('process:abort-stale', {
                 sourceUrl,
                 latestSrc: latestAfterBlob,
@@ -427,26 +408,21 @@ async function processCurrentImage(container) {
 
         await setProcessedCacheBlob(sourceUrl, processedBlob, runtimeSettings);
 
-        img.dataset.aiProcessed = 'true';
-        img.dataset.aiProcessedSrc = sourceUrl;
-        canvas.dataset.aiSourceUrl = sourceUrl;
-        delete img.dataset.aiProcessingSrc;
-        hideOriginal(img);
-        reconcile(container);
+        applyProcessedBlobToImage(img, sourceUrl, processedBlob);
     } catch (err) {
         if (shouldSkipSourceAfterError(err)) {
             img.dataset.aiSkipSource = sourceUrl;
         }
         img.dataset.aiProcessed = 'false';
         delete img.dataset.aiProcessingSrc;
-        showOriginal(img);
+        restoreOriginalImage(img);
         log('process:error', { sourceUrl, page, jobId, error: String(err) });
         console.error('Anime4K processing failed:', err);
     }
 }
 
 function isAiCanvasNode(node) {
-    return node instanceof HTMLCanvasElement && node.classList.contains('ai-canvas');
+    return node instanceof HTMLCanvasElement && node.__nhScalerCanvas__ === true;
 }
 
 function isCanvasOnlyChildListMutation(mutation) {
@@ -464,6 +440,7 @@ let scheduled = false;
 let backgroundDiscoveryTimeoutId = null;
 
 const scheduleProcess = (reason) => {
+    if (isRuntimeMutationSuppressed()) return;
     if (scheduled) return;
     scheduled = true;
     queueMicrotask(() => {
@@ -480,6 +457,7 @@ const scheduleProcess = (reason) => {
 };
 
 function scheduleBackgroundDiscovery(reason) {
+    if (isRuntimeMutationSuppressed()) return;
     if (backgroundDiscoveryTimeoutId !== null) {
         clearTimeout(backgroundDiscoveryTimeoutId);
     }
@@ -493,6 +471,7 @@ function scheduleBackgroundDiscovery(reason) {
 }
 
 function attachContainerObserver() {
+    if (isRuntimeMutationSuppressed()) return;
     const container = getActiveContainer();
     if (!container) {
         if (containerObserver) {
@@ -564,6 +543,7 @@ function attachContainerObserver() {
 }
 
 const rootObserver = new MutationObserver((mutations) => {
+    if (isRuntimeMutationSuppressed()) return;
     attachContainerObserver();
     scheduleBackgroundDiscovery('root-mutation');
 
@@ -571,12 +551,12 @@ const rootObserver = new MutationObserver((mutations) => {
         if (mutation.type === 'childList') {
             for (const node of mutation.addedNodes) {
                 if (node instanceof HTMLImageElement) {
-                    const srcUrl = node.currentSrc || node.src;
+                    const srcUrl = getImageSourceUrl(node);
                     queueBackgroundIfEligible(srcUrl, 'dom-image');
                 } else if (node instanceof Element) {
                     const imgs = node.querySelectorAll('img[src], img[data-src]');
                     for (const img of imgs) {
-                        const srcUrl = img.currentSrc || img.src || img.dataset.src;
+                        const srcUrl = getImageSourceUrl(img);
                         queueBackgroundIfEligible(srcUrl, 'dom-scan');
                     }
                 }
@@ -603,6 +583,8 @@ document.addEventListener('visibilitychange', () => {
         return;
     }
 
+    if (isRuntimeMutationSuppressed()) return;
+
     attachContainerObserver();
     scheduleProcess('visibilitychange');
     scheduleBackgroundDiscovery('visibilitychange');
@@ -616,22 +598,44 @@ if (chrome?.storage?.onChanged) {
         const changeResult = applyRuntimePreferenceStorageChanges(changes);
         if (!changeResult.didChange) return;
 
-        resetBackendRuntimeState();
-        resetProcessedRuntimeState();
+        runtimeMutationSuppressed = true;
 
-        document.querySelectorAll('img[data-ai-processed-src]').forEach((img) => {
-            delete img.dataset.aiProcessed;
-            delete img.dataset.aiProcessedSrc;
-            delete img.dataset.aiProcessingSrc;
-            delete img.dataset.aiJobId;
-        });
-        document.querySelectorAll('.ai-canvas').forEach((canvas) => {
-            canvas.remove();
-        });
+        if (runtimeSettingsFlushTimeoutId !== null) {
+            clearTimeout(runtimeSettingsFlushTimeoutId);
+        }
 
-        log('settings:changed', getRuntimePreferenceSnapshot());
-        scheduleProcess('preset-changed');
-        scheduleBackgroundDiscovery('preset-changed');
+        runtimeSettingsFlushTimeoutId = window.setTimeout(() => {
+            runtimeSettingsFlushTimeoutId = null;
+
+            resetBackendRuntimeState();
+            resetProcessedRuntimeState();
+
+            const nextSettings = getRuntimePreferenceSnapshot();
+            const activeContainer = getActiveContainer();
+            const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
+
+            if (nextSettings.selectedEngineBackend === 'off') {
+                if (activeImg && (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc)) {
+                    restoreOriginalImage(activeImg, !!activeImg.dataset.aiProcessingSrc);
+                }
+            } else {
+                document.querySelectorAll('img[data-ai-processed-src]').forEach((img) => {
+                    restoreOriginalImage(img);
+                    delete img.dataset.aiJobId;
+                });
+            }
+
+            log('settings:changed', nextSettings);
+
+            runtimeMutationSuppressed = false;
+
+            if (nextSettings.selectedEngineBackend === 'off') {
+                return;
+            }
+
+            scheduleProcess('preset-changed');
+            scheduleBackgroundDiscovery('preset-changed');
+        }, 50);
     });
 }
 
@@ -685,6 +689,7 @@ Promise.allSettled([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleRea
 
 setInterval(() => {
     if (!isForegroundTab()) return;
+    if (isRuntimeMutationSuppressed()) return;
 
     attachContainerObserver();
     scheduleProcess('interval');

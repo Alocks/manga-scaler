@@ -227,16 +227,22 @@ const templateSiteSourceAdapter = {
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
+function registerSourceAdapter(adapter) {
+    if (!adapter || typeof adapter !== 'object') return;
+
+    if (!Array.isArray(window.NHScalerSourceAdapters)) {
+        window.NHScalerSourceAdapters = [];
+    }
+
+    const existingIndex = window.NHScalerSourceAdapters.findIndex((existingAdapter) => existingAdapter?.id === adapter.id);
+    if (existingIndex >= 0) {
+        window.NHScalerSourceAdapters[existingIndex] = adapter;
+    } else {
+        window.NHScalerSourceAdapters.push(adapter);
+    }
 }
 
-const existingTemplateAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === TEMPLATE_SOURCE_ID);
-if (existingTemplateAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingTemplateAdapterIndex] = templateSiteSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(templateSiteSourceAdapter);
-}
+registerSourceAdapter(templateSiteSourceAdapter);
 // --- END src/runtime/sources/base_source.js ---
 
 // --- BEGIN src/runtime/sources/nhentai.js ---
@@ -272,6 +278,7 @@ function logNhentaiParseIssue(kind, url, extra = {}) {
 
 const nhentaiSourceAdapter = {
     id: NHENTAI_SOURCE_ID,
+    mirrorSourceImagePresentation: false,
     supportsUrl(url) {
         const parsed = parseNhentaiUrlSafely(url);
         return !!parsed && isNhentaiHost(parsed.hostname);
@@ -304,23 +311,14 @@ const nhentaiSourceAdapter = {
         };
     },
     getActiveContainer() {
-        return document.querySelector('#image-container');
+        return getGenericActiveContainer();
     },
     selectForegroundImage(container) {
         return container.querySelector('img');
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
-}
-
-const existingNhentaiAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === NHENTAI_SOURCE_ID);
-if (existingNhentaiAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingNhentaiAdapterIndex] = nhentaiSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(nhentaiSourceAdapter);
-}
+registerSourceAdapter(nhentaiSourceAdapter);
 // --- END src/runtime/sources/nhentai.js ---
 
 // --- BEGIN src/runtime/sources/comix.js ---
@@ -360,6 +358,7 @@ function logComixParseIssue(kind, url, extra = {}) {
 
 const comixSourceAdapter = {
     id: COMIX_SOURCE_ID,
+    mirrorSourceImagePresentation: false,
     supportsUrl(url) {
         const parsed = parseComixUrlSafely(url);
         return !!parsed && isComixHost(parsed.hostname);
@@ -394,24 +393,12 @@ const comixSourceAdapter = {
         };
     },
     getActiveContainer() {
-        const sourceImage = Array.from(document.querySelectorAll('img[src], img[data-src]'))
-            .find((img) => {
-                const sourceUrl = img.currentSrc || img.src || img.dataset.src;
-                const parsed = parseComixUrlSafely(sourceUrl);
-                return !!parsed && isComixImageHost(parsed.hostname);
-            });
-
-        if (!sourceImage) return null;
-
-        return sourceImage.closest('.rpage-main__inner')
-            || sourceImage.closest('.rpage-page')
-            || sourceImage.parentElement
-            || sourceImage;
+        return getGenericActiveContainer();
     },
     selectForegroundImage(container) {
         const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
         const sourceImgs = imgs.filter((img) => {
-            const sourceUrl = img.currentSrc || img.src || img.dataset.src;
+            const sourceUrl = getImageSourceUrl(img);
             const parsed = parseComixUrlSafely(sourceUrl);
             return !!parsed && isComixImageHost(parsed.hostname);
         });
@@ -426,7 +413,7 @@ const comixSourceAdapter = {
         if (visibleCandidate) return visibleCandidate;
 
         const unprocessedCandidate = sourceImgs.find((img) => {
-            const sourceUrl = img.currentSrc || img.src;
+            const sourceUrl = getImageSourceUrl(img);
             return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
         });
         if (unprocessedCandidate) return unprocessedCandidate;
@@ -435,16 +422,7 @@ const comixSourceAdapter = {
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
-}
-
-const existingComixAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === COMIX_SOURCE_ID);
-if (existingComixAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingComixAdapterIndex] = comixSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(comixSourceAdapter);
-}
+registerSourceAdapter(comixSourceAdapter);
 // --- END src/runtime/sources/comix.js ---
 
 // --- BEGIN src/runtime/sources/mangadex.js ---
@@ -505,7 +483,7 @@ function getMangaDexPageNumberFromDom(imageUrl) {
     const imgs = getMangaDexReaderImages();
     for (let i = 0; i < imgs.length; i++) {
         const img = imgs[i];
-        const srcUrl = img.currentSrc || img.src || img.dataset.src;
+        const srcUrl = getImageSourceUrl(img);
         if (!srcUrl) continue;
         if (srcUrl === imageUrl) {
             return i + 1;
@@ -555,11 +533,6 @@ function getMangaDexCurrentPageNumber(pageUrl = window.location.href) {
     return getMangaDexCurrentPageFromUrl(pageUrl) || getMangaDexCurrentPageFromProgressUi();
 }
 
-function getMangaDexImageUrl(img) {
-    if (!(img instanceof HTMLImageElement)) return null;
-    return img.currentSrc || img.src || img.dataset.src || null;
-}
-
 function logMangaDexParseIssue(kind, url, extra = {}) {
     if (typeof url !== 'string' || !url) return;
 
@@ -574,6 +547,7 @@ function logMangaDexParseIssue(kind, url, extra = {}) {
 
 const mangadexSourceAdapter = {
     id: MANGADEX_SOURCE_ID,
+    mirrorSourceImagePresentation: false,
     supportsUrl(url) {
         const parsed = parseMangaDexUrlSafely(url);
         return !!parsed && isMangaDexHost(parsed.hostname);
@@ -603,12 +577,12 @@ const mangadexSourceAdapter = {
         };
     },
     getActiveContainer() {
-        return document.querySelector('.md--reader-pages') || document.querySelector('.md--page') || null;
+        return getGenericActiveContainer();
     },
     selectForegroundImage(container, pageUrl = window.location.href) {
         const imgs = Array.from(container.querySelectorAll('img[src], img[data-src]'));
         const sourceImgs = imgs.filter((img) => {
-            const sourceUrl = getMangaDexImageUrl(img);
+            const sourceUrl = getImageSourceUrl(img);
             return !!sourceUrl && isMangaDexImageUrl(sourceUrl);
         });
         if (sourceImgs.length === 0) return null;
@@ -628,7 +602,7 @@ const mangadexSourceAdapter = {
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
 
         const visibleCandidate = sourceImgs.find((img) => {
-            const sourceUrl = getMangaDexImageUrl(img);
+            const sourceUrl = getImageSourceUrl(img);
             const computedStyle = window.getComputedStyle(img);
             const rect = img.getBoundingClientRect();
             return (
@@ -644,7 +618,7 @@ const mangadexSourceAdapter = {
         if (visibleCandidate) return visibleCandidate;
 
         const unprocessedCandidate = sourceImgs.find((img) => {
-            const sourceUrl = getMangaDexImageUrl(img);
+            const sourceUrl = getImageSourceUrl(img);
             return sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
         });
         if (unprocessedCandidate) return unprocessedCandidate;
@@ -653,16 +627,7 @@ const mangadexSourceAdapter = {
     }
 };
 
-if (!Array.isArray(window.NHScalerSourceAdapters)) {
-    window.NHScalerSourceAdapters = [];
-}
-
-const existingMangaDexAdapterIndex = window.NHScalerSourceAdapters.findIndex((adapter) => adapter?.id === MANGADEX_SOURCE_ID);
-if (existingMangaDexAdapterIndex >= 0) {
-    window.NHScalerSourceAdapters[existingMangaDexAdapterIndex] = mangadexSourceAdapter;
-} else {
-    window.NHScalerSourceAdapters.push(mangadexSourceAdapter);
-}
+registerSourceAdapter(mangadexSourceAdapter);
 // --- END src/runtime/sources/mangadex.js ---
 
 // --- BEGIN src/runtime/url-utils.js ---
@@ -710,7 +675,102 @@ function getSourcePageNumber(url) {
     return getSourceAdapterForImageUrl(url)?.parsed?.page || null;
 }
 
+function getReaderImageCandidates() {
+    const images = Array.from(document.querySelectorAll('img[src], img[data-src]'));
+    return images.filter((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        return !!sourceUrl && isSourceImageUrl(sourceUrl) && !img.closest('header, nav, footer');
+    });
+}
+
+function selectReaderForegroundImage() {
+    const candidates = getReaderImageCandidates();
+    if (candidates.length === 0) return null;
+
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+    const visibleCandidate = candidates.find((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        const computedStyle = window.getComputedStyle(img);
+        const rect = img.getBoundingClientRect();
+        return (
+            !!sourceUrl &&
+            computedStyle.display !== 'none' &&
+            computedStyle.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.bottom >= 0 &&
+            rect.top <= viewportHeight
+        );
+    });
+    if (visibleCandidate) return visibleCandidate;
+
+    const unprocessedCandidate = candidates.find((img) => {
+        const sourceUrl = getImageSourceUrl(img);
+        return !!sourceUrl && img.dataset.aiProcessedSrc !== sourceUrl;
+    });
+    if (unprocessedCandidate) return unprocessedCandidate;
+
+    return candidates[0];
+}
+
+function isLikelyReaderContainerElement(element) {
+    if (!(element instanceof Element)) return false;
+    if (element === document.body || element === document.documentElement) return false;
+
+    if (element.id === 'image-container') return true;
+
+    const className = typeof element.className === 'string' ? element.className : '';
+    if (/\b(md--reader-pages|md--page|rpage-main__inner|rpage-page)\b/i.test(className)) return true;
+
+    const idName = typeof element.id === 'string' ? element.id : '';
+    return /(?:reader|page|image|viewer)/i.test(idName) && /(?:reader|page|image|viewer)/i.test(className);
+}
+
+function getReaderContainerFromImage(img) {
+    if (!(img instanceof HTMLImageElement)) return null;
+
+    let current = img.parentElement;
+    let fallback = current;
+
+    while (current && current !== document.body) {
+        if (isLikelyReaderContainerElement(current)) {
+            return current;
+        }
+
+        const parent = current.parentElement;
+        if (!parent) break;
+
+        if (current.tagName === 'A' || current.tagName === 'PICTURE' || current.tagName === 'FIGURE') {
+            current = parent;
+            continue;
+        }
+
+        if (current.querySelectorAll('img').length === 1 && current.contains(img)) {
+            fallback = current;
+            if (parent.children.length > 1) {
+                return current;
+            }
+        }
+
+        current = parent;
+    }
+
+    return fallback || img.parentElement || img;
+}
+
+function getGenericActiveContainer() {
+    const foregroundImage = selectReaderForegroundImage();
+    if (!foregroundImage) return null;
+
+    const container = getReaderContainerFromImage(foregroundImage);
+    return container instanceof Element ? container : null;
+}
+
 function getActiveContainer(pageUrl = window.location.href) {
+    const genericContainer = getGenericActiveContainer();
+    if (genericContainer) return genericContainer;
+
     const activeAdapter = getActiveSourceAdapter(pageUrl);
     if (activeAdapter && typeof activeAdapter?.getActiveContainer === 'function') {
         const container = activeAdapter.getActiveContainer(pageUrl);
@@ -1835,7 +1895,7 @@ function resetBackendRuntimeState() {
 const IMAGE_LOAD_TIMEOUT_MS = 10000;
 const HARD_MAX_CANVAS_DIMENSION = 16384;
 let cachedMaxCanvasDimension = null;
-let canvasAnchorCounter = 0;
+const NH_SCALER_CANVAS_MARK = '__nhScalerCanvas__';
 
 function getMaxCanvasDimension() {
     if (cachedMaxCanvasDimension !== null) return cachedMaxCanvasDimension;
@@ -1865,110 +1925,173 @@ function showOriginal(img) {
     img.style.removeProperty('visibility');
 }
 
-function disableUpscalingForContainer(container, sourceUrl) {
-    const imgs = container.querySelectorAll('img');
-    for (const img of imgs) {
-        showOriginal(img);
-        img.dataset.aiProcessed = 'false';
-        delete img.dataset.aiProcessingSrc;
-        delete img.dataset.aiProcessedSrc;
+function getImageSourceUrl(img) {
+    if (!(img instanceof HTMLImageElement)) return null;
+    if (img.dataset.aiBlobUrl && img.dataset.aiProcessedSrc) {
+        return img.dataset.aiProcessedSrc;
+    }
+    return img.currentSrc || img.src || img.dataset.src || null;
+}
+
+function rememberOriginalImageState(img, sourceUrl) {
+    if (!(img instanceof HTMLImageElement)) return;
+    if (!img.dataset.aiOriginalSrc && sourceUrl) {
+        img.dataset.aiOriginalSrc = sourceUrl;
+    }
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalSrcset')) {
+        img.dataset.aiOriginalSrcset = img.getAttribute('srcset') || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalSizes')) {
+        img.dataset.aiOriginalSizes = img.getAttribute('sizes') || '';
+    }
+}
+
+function revokeProcessedBlobUrl(img) {
+    if (!(img instanceof HTMLImageElement)) return;
+    const blobUrl = img.dataset.aiBlobUrl;
+    if (!blobUrl) return;
+
+    try {
+        URL.revokeObjectURL(blobUrl);
+    } catch {
+        // Ignore revocation failures.
     }
 
-    const canvases = container.querySelectorAll('.ai-canvas');
-    for (const canvas of canvases) {
-        canvas.style.display = 'none';
-        canvas.style.visibility = 'hidden';
-        if (sourceUrl) {
-            canvas.dataset.aiSourceUrl = sourceUrl;
+    delete img.dataset.aiBlobUrl;
+}
+
+function restoreOriginalImage(img, preserveProcessingState = false) {
+    if (!(img instanceof HTMLImageElement)) return;
+
+    revokeProcessedBlobUrl(img);
+
+    const originalSrc = img.dataset.aiOriginalSrc;
+    if (originalSrc) {
+        if (img.dataset.aiOriginalSrcset) {
+            img.setAttribute('srcset', img.dataset.aiOriginalSrcset);
+        } else {
+            img.removeAttribute('srcset');
         }
+
+        if (img.dataset.aiOriginalSizes) {
+            img.setAttribute('sizes', img.dataset.aiOriginalSizes);
+        } else {
+            img.removeAttribute('sizes');
+        }
+
+        img.src = originalSrc;
+    }
+
+    img.dataset.aiProcessed = 'false';
+    if (!preserveProcessingState) {
+        delete img.dataset.aiProcessedSrc;
+        delete img.dataset.aiProcessingSrc;
+        delete img.dataset.aiJobId;
+    }
+}
+
+function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
+    if (!(img instanceof HTMLImageElement)) return null;
+    if (!(processedBlob instanceof Blob)) return null;
+
+    rememberOriginalImageState(img, sourceUrl);
+    revokeProcessedBlobUrl(img);
+
+    const objectUrl = URL.createObjectURL(processedBlob);
+    img.dataset.aiBlobUrl = objectUrl;
+    img.dataset.aiProcessed = 'true';
+    img.dataset.aiProcessedSrc = sourceUrl;
+    delete img.dataset.aiProcessingSrc;
+    delete img.dataset.aiJobId;
+
+    img.removeAttribute('srcset');
+    img.removeAttribute('sizes');
+    img.src = objectUrl;
+
+    return objectUrl;
+}
+
+function isInjectedCanvas(node) {
+    return node instanceof HTMLCanvasElement && node[NH_SCALER_CANVAS_MARK] === true;
+}
+
+function getInjectedCanvases(root) {
+    if (!(root instanceof Element)) return [];
+    return Array.from(root.querySelectorAll('canvas')).filter((canvas) => isInjectedCanvas(canvas));
+}
+
+function disableUpscalingForContainer(container, activeImg = null) {
+    if (activeImg instanceof HTMLImageElement) {
+        if (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc) {
+            restoreOriginalImage(activeImg, !!activeImg.dataset.aiProcessingSrc);
+        }
+        return;
+    }
+
+    const imgs = container.querySelectorAll('img');
+    for (const img of imgs) {
+        restoreOriginalImage(img);
+    }
+
+    const canvases = getInjectedCanvases(container);
+    for (const canvas of canvases) {
+        canvas.remove();
     }
 }
 
 function syncCanvasPresentation(canvas, img) {
     if (!(canvas instanceof HTMLCanvasElement) || !(img instanceof HTMLImageElement)) return;
 
-    const classNames = ['ai-canvas'];
-    for (const cls of img.classList) {
-        // Do not inherit host generic image class names that can force full-size fills.
-        if (cls !== 'ai-canvas' && cls !== 'img') classNames.push(cls);
+    const activeAdapter = typeof getActiveSourceAdapter === 'function' ? getActiveSourceAdapter() : null;
+    const mirrorSourcePresentation = activeAdapter?.mirrorSourceImagePresentation !== false;
+
+    canvas[NH_SCALER_CANVAS_MARK] = true;
+
+    if (mirrorSourcePresentation) {
+        canvas.style.width = img.style.width || '';
+        canvas.style.height = img.style.height || '';
+        canvas.style.maxWidth = img.style.maxWidth || '';
+        canvas.style.maxHeight = img.style.maxHeight || '';
+        canvas.style.minWidth = img.style.minWidth || '';
+        canvas.style.minHeight = img.style.minHeight || '';
+        canvas.style.objectFit = img.style.objectFit || '';
+        canvas.style.objectPosition = img.style.objectPosition || '';
+    } else {
+        canvas.style.removeProperty('width');
+        canvas.style.removeProperty('height');
+        canvas.style.removeProperty('max-width');
+        canvas.style.removeProperty('max-height');
+        canvas.style.removeProperty('min-width');
+        canvas.style.removeProperty('min-height');
+        canvas.style.removeProperty('object-fit');
+        canvas.style.removeProperty('object-position');
     }
-    canvas.className = classNames.join(' ');
-
-    // Carry over some responsive behavior from the source image but avoid
-    // propagating visibility/display toggles managed by this runtime.
-    canvas.style.width = img.style.width || '';
-    canvas.style.height = img.style.height || '';
-    canvas.style.maxWidth = img.style.maxWidth || '';
-    canvas.style.maxHeight = img.style.maxHeight || '';
-    canvas.style.minWidth = img.style.minWidth || '';
-    canvas.style.minHeight = img.style.minHeight || '';
-    canvas.style.objectFit = img.style.objectFit || '';
-    canvas.style.objectPosition = img.style.objectPosition || '';
-
-    // Keep canvas aspect-ratio rendering controlled by intrinsic dimensions.
-    if (!canvas.style.width) canvas.style.width = 'auto';
-    if (!canvas.style.height) canvas.style.height = 'auto';
-
-    // Hard clamp to viewport height so injected canvases always fit vertically.
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-    canvas.style.maxHeight = viewportHeight > 0 ? `${viewportHeight}px` : '100vh';
-    canvas.style.maxWidth = '100%';
-}
-
-function ensureCanvasAnchorId(img) {
-    if (!(img instanceof HTMLImageElement)) return null;
-    if (!img.dataset.aiCanvasAnchorId) {
-        canvasAnchorCounter += 1;
-        img.dataset.aiCanvasAnchorId = `ai-anchor-${canvasAnchorCounter}`;
-    }
-    return img.dataset.aiCanvasAnchorId;
 }
 
 function getCanvasForImage(img) {
     if (!(img instanceof HTMLImageElement)) return null;
+    const nextSibling = img.nextElementSibling;
+    if (isInjectedCanvas(nextSibling)) {
+        return nextSibling;
+    }
+
+    const previousSibling = img.previousElementSibling;
+    if (isInjectedCanvas(previousSibling)) {
+        return previousSibling;
+    }
+
     const parent = img.parentElement;
     if (!parent) return null;
 
-    const anchorId = ensureCanvasAnchorId(img);
-    if (!anchorId) return null;
-
-    return parent.querySelector(`.ai-canvas[data-ai-anchor-id="${anchorId}"]`);
+    const canvases = getInjectedCanvases(parent);
+    return canvases.length === 1 ? canvases[0] : null;
 }
 
 function ensureCanvas(parent, sourceImg) {
-    const anchorId = ensureCanvasAnchorId(sourceImg);
-    let canvas = anchorId ? parent.querySelector(`.ai-canvas[data-ai-anchor-id="${anchorId}"]`) : null;
-
-    if (!canvas && sourceImg instanceof HTMLImageElement) {
-        const siblingCanvas = sourceImg.nextElementSibling;
-        if (
-            siblingCanvas instanceof HTMLCanvasElement &&
-            siblingCanvas.classList.contains('ai-canvas') &&
-            siblingCanvas.dataset.aiAnchorId === anchorId
-        ) {
-            canvas = siblingCanvas;
-        }
-    }
-
-    if (!canvas) {
-        canvas = document.createElement('canvas');
-        canvas.width = 0;
-        canvas.height = 0;
-        canvas.className = 'ai-canvas';
-        if (anchorId) {
-            canvas.dataset.aiAnchorId = anchorId;
-        }
-        canvas.style.pointerEvents = 'none';
-        canvas.style.display = 'none';
-        canvas.style.visibility = 'hidden';
-
-        if (sourceImg instanceof HTMLImageElement && sourceImg.parentElement === parent) {
-            sourceImg.insertAdjacentElement('afterend', canvas);
-        } else {
-            parent.appendChild(canvas);
-        }
-    }
-
+    const canvas = document.createElement('canvas');
+    canvas.width = 0;
+    canvas.height = 0;
+    canvas[NH_SCALER_CANVAS_MARK] = true;
     if (sourceImg instanceof HTMLImageElement) {
         syncCanvasPresentation(canvas, sourceImg);
     }
@@ -1988,14 +2111,17 @@ function hasRenderedCanvasForSource(img, canvas, sourceUrl) {
 
 function reconcile(container) {
     if (getEffectiveBackend() === 'off') {
-        disableUpscalingForContainer(container);
+        const activeImg = selectForegroundImage(container);
+        if (activeImg && (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc)) {
+            disableUpscalingForContainer(container, activeImg);
+        }
         return;
     }
 
     const activeImg = selectForegroundImage(container);
     const imgs = container.querySelectorAll('img');
     for (const img of imgs) {
-        const sourceUrl = img.currentSrc || img.src;
+        const sourceUrl = getImageSourceUrl(img);
         if (!sourceUrl) continue;
 
         const parent = img.parentElement;
@@ -2109,6 +2235,7 @@ function getNextBackgroundQueueIndex() {
 }
 
 function queueBackgroundIfEligible(url, source) {
+    if (isRuntimeMutationSuppressed()) return;
     if (!isReaderPageUrl(window.location.href)) return;
     if (!isSourceImageUrl(url)) return;
 
@@ -2131,7 +2258,7 @@ function queueBackgroundIfEligible(url, source) {
 
     const activeContainer = getActiveContainer();
     const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
     if (url === activeUrl) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'active-image' });
         return;
@@ -2186,7 +2313,7 @@ async function preprocessBackgroundImage(sourceUrl) {
 
     const activeContainer = getActiveContainer();
     const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
     if (sourceUrl === activeUrl) {
         logQueueEvent('bg-process:skip-foreground', sourceUrl);
         return;
@@ -2259,7 +2386,7 @@ async function processBackgroundQueue() {
         }
 
         const activeImg = getActiveContainer()?.querySelector('img');
-        const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+        const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
         if (sourceUrl === activeUrl) {
             logQueueEvent('bg-process:skip-now-foreground', sourceUrl);
             continue;
@@ -2360,11 +2487,11 @@ function findAndProcessBackgroundImages() {
     const allImages = Array.from(document.querySelectorAll('img[src], img[data-src]'));
     const activeContainer = getActiveContainer();
     const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
 
     let found = 0;
     for (const img of allImages) {
-        const srcUrl = img.currentSrc || img.src || img.dataset.src;
+        const srcUrl = getImageSourceUrl(img);
         if (!srcUrl || srcUrl === activeUrl) continue;
 
         if (isSourceImageUrl(srcUrl)) {
@@ -2419,6 +2546,8 @@ const BOOT_DIAGNOSTICS_PHASE_READY = 'ready';
 let jobCounter = 0;
 const CLEAR_CACHE_MESSAGE_TYPE = 'manga-scaler:clear-cache';
 const GET_DIAGNOSTICS_MESSAGE_TYPE = 'manga-scaler:get-diagnostics';
+let runtimeMutationSuppressed = false;
+let runtimeSettingsFlushTimeoutId = null;
 
 function log(label, data = {}) {
     if (typeof window.NHScalerLog === 'function') {
@@ -2480,6 +2609,10 @@ function isForegroundTab() {
     return document.visibilityState === 'visible' && !document.hidden;
 }
 
+function isRuntimeMutationSuppressed() {
+    return runtimeMutationSuppressed;
+}
+
 function getRequestedScaleForBackend(runtimeSettings) {
     const backend = getEffectiveBackend(runtimeSettings);
     const rawScale = backend === 'webgpu'
@@ -2529,7 +2662,7 @@ function logQueueEvent(label, sourceUrl, extra = {}) {
 }
 
 function isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent) {
-    const latestSrc = img.currentSrc || img.src;
+    const latestSrc = getImageSourceUrl(img);
     return (
         !isForegroundTab() ||
         img.dataset.aiJobId !== jobId ||
@@ -2665,14 +2798,14 @@ async function processCurrentImage(container) {
     const img = selectForegroundImage(container);
     if (!img) return;
 
-    const sourceUrl = img.currentSrc || img.src;
+    const sourceUrl = getImageSourceUrl(img);
     if (!sourceUrl) return;
     if (img.dataset.aiSkipSource === sourceUrl) return;
 
     const runtimeSettings = getRuntimePreferenceSnapshot();
 
     if (getEffectiveBackend(runtimeSettings) === 'off') {
-        disableUpscalingForContainer(container, sourceUrl);
+        disableUpscalingForContainer(container, img);
         return;
     }
 
@@ -2692,7 +2825,7 @@ async function processCurrentImage(container) {
     ) {
         img.dataset.aiSkipSource = sourceUrl;
         img.dataset.aiProcessed = 'false';
-        disableUpscalingForContainer(container, sourceUrl);
+        disableUpscalingForContainer(container);
         log('process:skip-oversize', {
             sourceUrl,
             page: getSourcePageNumber(sourceUrl),
@@ -2705,39 +2838,14 @@ async function processCurrentImage(container) {
         return;
     }
 
-    const existingCanvas = getCanvasForImage(img);
-
-    if (existingCanvas && existingCanvas.dataset.aiSourceUrl && existingCanvas.dataset.aiSourceUrl !== sourceUrl) {
-        existingCanvas.remove();
-    }
-
-    const currentCanvas = getCanvasForImage(img);
-    if (hasRenderedCanvasForSource(img, currentCanvas, sourceUrl)) {
-        syncCanvasPresentation(currentCanvas, img);
-        reconcile(container);
+    if (img.dataset.aiProcessedSrc === sourceUrl && img.dataset.aiBlobUrl) {
         return;
     }
 
     const cachedBlob = await getProcessedCacheBlob(sourceUrl, runtimeSettings);
     if (cachedBlob) {
-        let canvas = ensureCanvas(parent, img);
-
-        try {
-            const bitmap = await createImageBitmap(cachedBlob);
-            const ctx = canvas.getContext('2d');
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            ctx.drawImage(bitmap, 0, 0);
-
-            img.dataset.aiProcessed = 'true';
-            img.dataset.aiProcessedSrc = sourceUrl;
-            canvas.dataset.aiSourceUrl = sourceUrl;
-            reconcile(container);
-            return;
-        } catch (err) {
-            await deleteProcessedCacheBlob(sourceUrl, runtimeSettings);
-            log('process:cache-restore-failed', { sourceUrl, error: String(err) });
-        }
+        applyProcessedBlobToImage(img, sourceUrl, cachedBlob);
+        return;
     }
 
     if (img.dataset.aiProcessingSrc === sourceUrl) return;
@@ -2753,7 +2861,7 @@ async function processCurrentImage(container) {
     }
     log('process:start', { sourceUrl, page, jobId, backend: getEffectiveBackend(runtimeSettings) });
 
-    let canvas = ensureCanvas(parent, img);
+    const canvas = ensureCanvas(parent, img);
 
     try {
         const tempImg = await loadSourceImage(sourceUrl);
@@ -2766,7 +2874,7 @@ async function processCurrentImage(container) {
             img.dataset.aiSkipSource = sourceUrl;
             img.dataset.aiProcessed = 'false';
             delete img.dataset.aiProcessingSrc;
-            disableUpscalingForContainer(container, sourceUrl);
+            disableUpscalingForContainer(container);
             log('process:skip-oversize', {
                 sourceUrl,
                 page,
@@ -2780,7 +2888,7 @@ async function processCurrentImage(container) {
             return;
         }
 
-        const latestSrc = img.currentSrc || img.src;
+        const latestSrc = getImageSourceUrl(img);
         if (isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent)) {
             log('process:abort-stale', { sourceUrl, latestSrc, jobId, activeJobId: img.dataset.aiJobId, phase: 'before-upscale' });
             delete img.dataset.aiProcessingSrc;
@@ -2799,7 +2907,7 @@ async function processCurrentImage(container) {
             model: runInfo.model,
         });
 
-        const latestAfterUpscale = img.currentSrc || img.src;
+        const latestAfterUpscale = getImageSourceUrl(img);
         if (isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent)) {
             log('process:abort-stale', {
                 sourceUrl,
@@ -2822,7 +2930,7 @@ async function processCurrentImage(container) {
         const processedBlob = await canvasToBlob(canvas);
 
         if (isStaleForegroundJob(img, jobId, sourceUrl, canvas, parent)) {
-            const latestAfterBlob = img.currentSrc || img.src;
+            const latestAfterBlob = getImageSourceUrl(img);
             log('process:abort-stale', {
                 sourceUrl,
                 latestSrc: latestAfterBlob,
@@ -2836,26 +2944,21 @@ async function processCurrentImage(container) {
 
         await setProcessedCacheBlob(sourceUrl, processedBlob, runtimeSettings);
 
-        img.dataset.aiProcessed = 'true';
-        img.dataset.aiProcessedSrc = sourceUrl;
-        canvas.dataset.aiSourceUrl = sourceUrl;
-        delete img.dataset.aiProcessingSrc;
-        hideOriginal(img);
-        reconcile(container);
+        applyProcessedBlobToImage(img, sourceUrl, processedBlob);
     } catch (err) {
         if (shouldSkipSourceAfterError(err)) {
             img.dataset.aiSkipSource = sourceUrl;
         }
         img.dataset.aiProcessed = 'false';
         delete img.dataset.aiProcessingSrc;
-        showOriginal(img);
+        restoreOriginalImage(img);
         log('process:error', { sourceUrl, page, jobId, error: String(err) });
         console.error('Anime4K processing failed:', err);
     }
 }
 
 function isAiCanvasNode(node) {
-    return node instanceof HTMLCanvasElement && node.classList.contains('ai-canvas');
+    return node instanceof HTMLCanvasElement && node.__nhScalerCanvas__ === true;
 }
 
 function isCanvasOnlyChildListMutation(mutation) {
@@ -2873,6 +2976,7 @@ let scheduled = false;
 let backgroundDiscoveryTimeoutId = null;
 
 const scheduleProcess = (reason) => {
+    if (isRuntimeMutationSuppressed()) return;
     if (scheduled) return;
     scheduled = true;
     queueMicrotask(() => {
@@ -2889,6 +2993,7 @@ const scheduleProcess = (reason) => {
 };
 
 function scheduleBackgroundDiscovery(reason) {
+    if (isRuntimeMutationSuppressed()) return;
     if (backgroundDiscoveryTimeoutId !== null) {
         clearTimeout(backgroundDiscoveryTimeoutId);
     }
@@ -2902,6 +3007,7 @@ function scheduleBackgroundDiscovery(reason) {
 }
 
 function attachContainerObserver() {
+    if (isRuntimeMutationSuppressed()) return;
     const container = getActiveContainer();
     if (!container) {
         if (containerObserver) {
@@ -2973,6 +3079,7 @@ function attachContainerObserver() {
 }
 
 const rootObserver = new MutationObserver((mutations) => {
+    if (isRuntimeMutationSuppressed()) return;
     attachContainerObserver();
     scheduleBackgroundDiscovery('root-mutation');
 
@@ -2980,12 +3087,12 @@ const rootObserver = new MutationObserver((mutations) => {
         if (mutation.type === 'childList') {
             for (const node of mutation.addedNodes) {
                 if (node instanceof HTMLImageElement) {
-                    const srcUrl = node.currentSrc || node.src;
+                    const srcUrl = getImageSourceUrl(node);
                     queueBackgroundIfEligible(srcUrl, 'dom-image');
                 } else if (node instanceof Element) {
                     const imgs = node.querySelectorAll('img[src], img[data-src]');
                     for (const img of imgs) {
-                        const srcUrl = img.currentSrc || img.src || img.dataset.src;
+                        const srcUrl = getImageSourceUrl(img);
                         queueBackgroundIfEligible(srcUrl, 'dom-scan');
                     }
                 }
@@ -3012,6 +3119,8 @@ document.addEventListener('visibilitychange', () => {
         return;
     }
 
+    if (isRuntimeMutationSuppressed()) return;
+
     attachContainerObserver();
     scheduleProcess('visibilitychange');
     scheduleBackgroundDiscovery('visibilitychange');
@@ -3025,22 +3134,44 @@ if (chrome?.storage?.onChanged) {
         const changeResult = applyRuntimePreferenceStorageChanges(changes);
         if (!changeResult.didChange) return;
 
-        resetBackendRuntimeState();
-        resetProcessedRuntimeState();
+        runtimeMutationSuppressed = true;
 
-        document.querySelectorAll('img[data-ai-processed-src]').forEach((img) => {
-            delete img.dataset.aiProcessed;
-            delete img.dataset.aiProcessedSrc;
-            delete img.dataset.aiProcessingSrc;
-            delete img.dataset.aiJobId;
-        });
-        document.querySelectorAll('.ai-canvas').forEach((canvas) => {
-            canvas.remove();
-        });
+        if (runtimeSettingsFlushTimeoutId !== null) {
+            clearTimeout(runtimeSettingsFlushTimeoutId);
+        }
 
-        log('settings:changed', getRuntimePreferenceSnapshot());
-        scheduleProcess('preset-changed');
-        scheduleBackgroundDiscovery('preset-changed');
+        runtimeSettingsFlushTimeoutId = window.setTimeout(() => {
+            runtimeSettingsFlushTimeoutId = null;
+
+            resetBackendRuntimeState();
+            resetProcessedRuntimeState();
+
+            const nextSettings = getRuntimePreferenceSnapshot();
+            const activeContainer = getActiveContainer();
+            const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
+
+            if (nextSettings.selectedEngineBackend === 'off') {
+                if (activeImg && (activeImg.dataset.aiBlobUrl || activeImg.dataset.aiProcessedSrc || activeImg.dataset.aiProcessingSrc)) {
+                    restoreOriginalImage(activeImg, !!activeImg.dataset.aiProcessingSrc);
+                }
+            } else {
+                document.querySelectorAll('img[data-ai-processed-src]').forEach((img) => {
+                    restoreOriginalImage(img);
+                    delete img.dataset.aiJobId;
+                });
+            }
+
+            log('settings:changed', nextSettings);
+
+            runtimeMutationSuppressed = false;
+
+            if (nextSettings.selectedEngineBackend === 'off') {
+                return;
+            }
+
+            scheduleProcess('preset-changed');
+            scheduleBackgroundDiscovery('preset-changed');
+        }, 50);
     });
 }
 
@@ -3094,6 +3225,7 @@ Promise.allSettled([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleRea
 
 setInterval(() => {
     if (!isForegroundTab()) return;
+    if (isRuntimeMutationSuppressed()) return;
 
     attachContainerObserver();
     scheduleProcess('interval');

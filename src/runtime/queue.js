@@ -28,6 +28,7 @@ function getNextBackgroundQueueIndex() {
 }
 
 function queueBackgroundIfEligible(url, source) {
+    if (isRuntimeMutationSuppressed()) return;
     if (!isReaderPageUrl(window.location.href)) return;
     if (!isSourceImageUrl(url)) return;
 
@@ -50,7 +51,7 @@ function queueBackgroundIfEligible(url, source) {
 
     const activeContainer = getActiveContainer();
     const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
     if (url === activeUrl) {
         logQueueEvent('bg-queue:skip', url, { source, reason: 'active-image' });
         return;
@@ -105,7 +106,7 @@ async function preprocessBackgroundImage(sourceUrl) {
 
     const activeContainer = getActiveContainer();
     const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
     if (sourceUrl === activeUrl) {
         logQueueEvent('bg-process:skip-foreground', sourceUrl);
         return;
@@ -178,7 +179,7 @@ async function processBackgroundQueue() {
         }
 
         const activeImg = getActiveContainer()?.querySelector('img');
-        const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+        const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
         if (sourceUrl === activeUrl) {
             logQueueEvent('bg-process:skip-now-foreground', sourceUrl);
             continue;
@@ -279,11 +280,11 @@ function findAndProcessBackgroundImages() {
     const allImages = Array.from(document.querySelectorAll('img[src], img[data-src]'));
     const activeContainer = getActiveContainer();
     const activeImg = activeContainer ? selectForegroundImage(activeContainer) : null;
-    const activeUrl = activeImg?.isConnected ? (activeImg.currentSrc || activeImg.src) : null;
+    const activeUrl = activeImg?.isConnected ? getImageSourceUrl(activeImg) : null;
 
     let found = 0;
     for (const img of allImages) {
-        const srcUrl = img.currentSrc || img.src || img.dataset.src;
+        const srcUrl = getImageSourceUrl(img);
         if (!srcUrl || srcUrl === activeUrl) continue;
 
         if (isSourceImageUrl(srcUrl)) {
