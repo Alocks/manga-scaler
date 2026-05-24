@@ -55,17 +55,50 @@ jobs:
         if: steps.commit_check.outputs.should_build == 'true'
         run: node tools/build-runtime-bundle.mjs
 
-      - name: Build Anime4K.js and prepare for CRX Build
+      - name: Build Anime4K.js and prepare minimal extension payload
         if: steps.commit_check.outputs.should_build == 'true'
         run: |
           git clone https://github.com/monyone/Anime4K.js temp_anime4k
           cd temp_anime4k && yarn install && yarn build
           cd ..
-          mkdir extension_root
-          rsync -rv --exclude='temp_anime4k' --exclude='extension_root' --exclude='.git' --exclude='.github' . extension_root/
+          mkdir -p extension_root/src/runtime
+          cp manifest.json extension_root/
+          cp content.js extension_root/
+          cp popup.html extension_root/
+          cp popup.js extension_root/
+          cp rules.json extension_root/
+          cp LICENSE extension_root/
+          cp src/runtime/runtime.bundle.js extension_root/src/runtime/runtime.bundle.js
+
+          mkdir -p extension_root/node_modules/anime4k-webgpu/lib
+          cp -R node_modules/anime4k-webgpu/lib/. extension_root/node_modules/anime4k-webgpu/lib/
+
           mkdir -p extension_root/node_modules/anime4k-webgl
-          cp -r temp_anime4k/dist/* extension_root/node_modules/anime4k-webgl
+          cp temp_anime4k/dist/anime4k.js extension_root/node_modules/anime4k-webgl/anime4k.js
           rm -rf temp_anime4k
+
+      - name: Verify payload only contains required files
+        if: steps.commit_check.outputs.should_build == 'true'
+        run: |
+          test -f extension_root/manifest.json
+          test -f extension_root/LICENSE
+          test -f extension_root/content.js
+          test -f extension_root/popup.html
+          test -f extension_root/popup.js
+          test -f extension_root/rules.json
+          test -f extension_root/src/runtime/runtime.bundle.js
+          test -f extension_root/node_modules/anime4k-webgpu/lib/index.js
+          test -f extension_root/node_modules/anime4k-webgl/anime4k.js
+          test ! -f extension_root/node_modules/anime4k-webgpu/package.json
+          test ! -f extension_root/node_modules/anime4k-webgpu/README.md
+
+      - name: Build release ZIP artifact
+        if: steps.commit_check.outputs.should_build == 'true'
+        run: |
+          cd extension_root
+          zip -r ../manga-scaler.zip .
+          cd ..
+          test -f manga-scaler.zip
 
       - name: Install Chrome
         if: steps.commit_check.outputs.should_build == 'true'
@@ -80,7 +113,7 @@ jobs:
         run: |
           echo "$EXTENSION_KEY" > key.pem
           google-chrome --headless --pack-extension=extension_root --pack-extension-key=key.pem
-          mv extension_root.crx nh-scaler.crx
+          mv extension_root.crx manga-scaler.crx
 
       - name: Generate release notes
         if: steps.commit_check.outputs.should_build == 'true'
@@ -101,7 +134,9 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: "v1.0.${{ github.run_number }}"
-          files: nh-scaler.crx
+          files: |
+            manga-scaler.zip
+            manga-scaler.crx
           body: |
             Build #${{ github.run_number }}
 

@@ -198,7 +198,6 @@ function setActiveEnginePanel(backend) {
   const normalizedBackend = String(backend || DEFAULT_ENGINE_BACKEND).toLowerCase();
   const panels = document.querySelectorAll('.engine-panel');
   const tabs = document.querySelectorAll('.tab-pill');
-  const webgpuWarning = document.querySelector('.tab-descriptions');
 
   panels.forEach((panel) => {
     panel.classList.toggle('active', panel.id === `enginePanel-${normalizedBackend}`);
@@ -207,10 +206,6 @@ function setActiveEnginePanel(backend) {
   tabs.forEach((tab) => {
     tab.classList.toggle('active', tab.dataset.tab === normalizedBackend);
   });
-
-  if (webgpuWarning) {
-    webgpuWarning.style.display = normalizedBackend === 'webgpu' ? 'block' : 'none';
-  }
 }
 
 async function loadCurrentSettings() {

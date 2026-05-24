@@ -26,8 +26,8 @@ let webgpuScaleReadyPromise = Promise.resolve();
 let backendPreferenceLoaded = false;
 
 function runtimeLog(label, data = {}) {
-    if (typeof window.NHScalerLog === 'function') {
-        window.NHScalerLog(label, data);
+    if (typeof window.MangaScalerLog === 'function') {
+        window.MangaScalerLog(label, data);
         return;
     }
     console.log('[Manga Scaler]', label, { ts: new Date().toISOString(), ...data });

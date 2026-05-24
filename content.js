@@ -12,7 +12,7 @@ function bootstrapLog(label, data = {}) {
     console.log('[Manga Scaler]', label, { ts: new Date().toISOString(), ...data });
 }
 
-window.NHScalerLog = bootstrapLog;
+window.MangaScalerLog = bootstrapLog;
 
 if (!document.querySelector('style[data-ai-scaler]')) {
     const style = document.createElement('style');

@@ -28,8 +28,8 @@ function logSourceParseIssue(issueStore, sourceId, kind, url, extra = {}) {
     if (issueStore.has(issueKey)) return;
     issueStore.add(issueKey);
 
-    if (typeof window.NHScalerLog === 'function') {
-        window.NHScalerLog(`url:${kind}`, { source: sourceId, url, ...extra });
+    if (typeof window.MangaScalerLog === 'function') {
+        window.MangaScalerLog(`url:${kind}`, { source: sourceId, url, ...extra });
     }
 }
 

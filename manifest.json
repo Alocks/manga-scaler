@@ -3,7 +3,7 @@
   "name": "Manga Scaler",
   "version": "1.0",
   "permissions": ["declarativeNetRequest", "storage"],
-  "host_permissions": ["*://*.nhentai.net/*", "*://nhentai.net/*", "*://*.comix.to/*", "*://comix.to/*", "*://*.wowpic2.store/*", "*://mangadex.org/*", "*://*.mangadex.org/*", "*://uploads.mangadex.org/*", "*://mangakakalot.gg/*", "*://*.mangakakalot.gg/*", "*://manganato.gg/*", "*://*.manganato.gg/*", "*://2xstorage.com/*", "*://*.2xstorage.com/*"],
+  "host_permissions": ["*://*.nhentai.net/*", "*://nhentai.net/*", "*://*.comix.to/*", "*://comix.to/*", "*://*.wowpic2.store/*", "*://mangadex.org/*", "*://*.mangadex.org/*", "*://mangakakalot.gg/*", "*://*.mangakakalot.gg/*", "*://manganato.gg/*", "*://*.manganato.gg/*", "*://2xstorage.com/*", "*://*.2xstorage.com/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Manga Scaler"
