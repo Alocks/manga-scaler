@@ -23,3 +23,45 @@ Available engines and profiles:
 
 ## After
 <img width="532" height="398" alt="image" src="https://github.com/user-attachments/assets/891cf80f-7c7a-4efd-a2bd-22fd02e89442" />
+
+## How to build the extension locally
+
+Both scripts generate artifacts inside the `dist` folder:
+- `dist/manga-scaler.zip`
+- `dist/manga-scaler.crx` (if browser packing is available)
+
+Optional signing key:
+- You can provide the private key using the environment variable `CRX_PRIVATE_KEY` or creating a .env file inside the project root.
+- If `CRX_PRIVATE_KEY` is not provided, the scripts still build and attempt unsigned CRX packing.
+
+### Windows (build.cmd)
+
+Requirements:
+- Git
+- Node.js + npm
+- Yarn
+- PowerShell
+- Microsoft Edge (for CRX packing)
+
+Run from the repository root:
+
+```bat
+build.cmd
+```
+
+### Linux/macOS (build.sh)
+
+Requirements:
+- Git
+- Node.js + npm
+- Yarn
+- zip
+- Chrome (`google-chrome`, `google-chrome-stable`, or `chrome`) for CRX packing
+
+Run from the repository root:
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
