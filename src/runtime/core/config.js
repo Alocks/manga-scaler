@@ -33,6 +33,15 @@ function runtimeLog(label, data = {}) {
     console.log('[Manga Scaler]', label, { ts: new Date().toISOString(), ...data });
 }
 
+function isRuntimeProfilingEnabled() {
+    return !!window.MangaScalerProfiling?.isEnabled?.();
+}
+
+function runtimeProfileLog(label, data = {}) {
+    if (!isRuntimeProfilingEnabled()) return;
+    runtimeLog(`profile:${label}`, data);
+}
+
 function normalizeSimplePreset(value) {
     const normalized = String(value || '').toUpperCase();
     return SIMPLE_PRESET_VALUES.has(normalized) ? normalized : DEFAULT_SIMPLE_PRESET;

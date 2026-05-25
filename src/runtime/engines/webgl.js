@@ -4,8 +4,17 @@
 let scaler = null;
 /** @type {Promise<any> | null} */
 let scalerPromise = null;
+let scalerCacheKey = null;
+let scalerPromiseKey = null;
 const WEBGL_FALLBACK_MAX_CANVAS_DIMENSION = 16384;
 const WEBGL_UPSCALER_CTOR_NAMES = ['ImageUpscaler'];
+let fallbackResizeCanvas = null;
+let fallbackResizeContext = null;
+let fallbackResizeCanvasWidth = 0;
+let fallbackResizeCanvasHeight = 0;
+const fallbackOutputContextCache = new WeakMap();
+let webglProcessingCanvas = null;
+let webglAttachedEngine = null;
 
 function getWebGlLibrary() {
     const lib = window.Anime4KJS || window.Anime4K;
@@ -41,10 +50,98 @@ function getRestoreUpscalePreset(lib, runtimeSettings = getRuntimePreferenceSnap
     return lib.ANIME4KJS_EMPTY || [];
 }
 
+function getWebGlScalerCacheKey(runtimeSettings = getRuntimePreferenceSnapshot()) {
+    const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
+    return `preset:${settings.selectedSimplePreset}`;
+}
+
+function getOrCreateFallbackOutputContext(canvas) {
+    let ctx = fallbackOutputContextCache.get(canvas);
+    if (!ctx) {
+        ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+        if (!ctx) {
+            throw new Error('2D fallback failed to acquire output context');
+        }
+        fallbackOutputContextCache.set(canvas, ctx);
+    }
+    return ctx;
+}
+
+function getOrCreateFallbackResizeContext(targetWidth, targetHeight) {
+    if (
+        !fallbackResizeCanvas ||
+        !fallbackResizeContext ||
+        fallbackResizeCanvasWidth !== targetWidth ||
+        fallbackResizeCanvasHeight !== targetHeight
+    ) {
+        fallbackResizeCanvas = createResizeCanvas(targetWidth, targetHeight);
+        fallbackResizeContext = fallbackResizeCanvas.getContext('2d', { alpha: true, desynchronized: true });
+        if (!fallbackResizeContext) {
+            throw new Error('2D fallback failed to acquire resize context');
+        }
+        fallbackResizeCanvasWidth = targetWidth;
+        fallbackResizeCanvasHeight = targetHeight;
+    }
+
+    return { canvas: fallbackResizeCanvas, ctx: fallbackResizeContext };
+}
+
+function getOrCreateWebGlProcessingCanvas() {
+    if (!webglProcessingCanvas) {
+        webglProcessingCanvas = createResizeCanvas(1, 1);
+    }
+    return webglProcessingCanvas;
+}
+
+function ensureWebGlEngineAttachment(engine, sourceImage) {
+    const processingCanvas = getOrCreateWebGlProcessingCanvas();
+
+    if (webglAttachedEngine !== engine) {
+        try {
+            webglAttachedEngine?.detachSource?.();
+        } catch {}
+
+        engine.attachSource(sourceImage, processingCanvas);
+        webglAttachedEngine = engine;
+        return processingCanvas;
+    }
+
+    engine.source = sourceImage;
+    engine.canvas = processingCanvas;
+    return processingCanvas;
+}
+
+function copyWebGlOutputToTargetCanvas(sourceCanvas, targetCanvas) {
+    const width = sourceCanvas.width || 0;
+    const height = sourceCanvas.height || 0;
+    if (width <= 0 || height <= 0) return;
+
+    if (targetCanvas.width !== width) {
+        targetCanvas.width = width;
+    }
+    if (targetCanvas.height !== height) {
+        targetCanvas.height = height;
+    }
+
+    const ctx = getOrCreateFallbackOutputContext(targetCanvas);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(sourceCanvas, 0, 0, width, height);
+}
+
 async function getScaler(runtimeSettings = getRuntimePreferenceSnapshot()) {
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
-    if (scaler) return scaler;
-    if (scalerPromise) return scalerPromise;
+    const cacheKey = getWebGlScalerCacheKey(settings);
+
+    if (scaler && scalerCacheKey === cacheKey) return scaler;
+
+    if (scalerPromise) {
+        const pendingScaler = await scalerPromise;
+        if (scalerPromiseKey === cacheKey) {
+            return pendingScaler;
+        }
+    }
 
     scalerPromise = (async () => {
         await Promise.all([presetReadyPromise, backendReadyPromise]);
@@ -77,18 +174,33 @@ async function getScaler(runtimeSettings = getRuntimePreferenceSnapshot()) {
 
         return instance;
     })();
+    scalerPromiseKey = cacheKey;
 
     try {
         scaler = await scalerPromise;
+        scalerCacheKey = cacheKey;
         return scaler;
     } finally {
         scalerPromise = null;
+        scalerPromiseKey = null;
     }
 }
 
 function resetWebGlAdapterState() {
+    try {
+        webglAttachedEngine?.detachSource?.();
+    } catch {}
+
     scaler = null;
     scalerPromise = null;
+    scalerCacheKey = null;
+    scalerPromiseKey = null;
+    fallbackResizeCanvas = null;
+    fallbackResizeContext = null;
+    fallbackResizeCanvasWidth = 0;
+    fallbackResizeCanvasHeight = 0;
+    webglProcessingCanvas = null;
+    webglAttachedEngine = null;
 }
 
 function resolveWebGlFallbackScale(runtimeSettings = getRuntimePreferenceSnapshot()) {
@@ -125,11 +237,14 @@ async function tryImageBitmapHighQualityResize(tempImg, canvas, targetWidth, tar
             resizeQuality: 'high'
         });
 
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
+        if (canvas.width !== targetWidth) {
+            canvas.width = targetWidth;
+        }
+        if (canvas.height !== targetHeight) {
+            canvas.height = targetHeight;
+        }
 
-        const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-        if (!ctx) return false;
+        const ctx = getOrCreateFallbackOutputContext(canvas);
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -174,27 +289,26 @@ async function upscaleWith2dFallback(tempImg, canvas, scale) {
         return;
     }
 
-    const intermediateCanvas = createResizeCanvas(targetWidth, targetHeight);
-    const intermediateCtx = intermediateCanvas.getContext('2d', { alpha: true, desynchronized: true });
-    if (!intermediateCtx) {
-        throw new Error('2D fallback failed to acquire resize context');
-    }
+    const resizeBuffer = getOrCreateFallbackResizeContext(targetWidth, targetHeight);
+    const intermediateCanvas = resizeBuffer.canvas;
+    const intermediateCtx = resizeBuffer.ctx;
 
     intermediateCtx.imageSmoothingEnabled = true;
     intermediateCtx.imageSmoothingQuality = 'high';
     intermediateCtx.clearRect(0, 0, targetWidth, targetHeight);
     intermediateCtx.drawImage(tempImg, 0, 0, targetWidth, targetHeight);
 
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
+    if (canvas.width !== targetWidth) {
+        canvas.width = targetWidth;
+    }
+    if (canvas.height !== targetHeight) {
+        canvas.height = targetHeight;
+    }
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
         throw new Error(`2D fallback canvas size rejected: ${targetWidth}x${targetHeight}`);
     }
 
-    const outputCtx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-    if (!outputCtx) {
-        throw new Error('2D fallback failed to acquire output context');
-    }
+    const outputCtx = getOrCreateFallbackOutputContext(canvas);
 
     outputCtx.imageSmoothingEnabled = true;
     outputCtx.imageSmoothingQuality = 'high';
@@ -212,8 +326,9 @@ async function runAnime4KWebGl(tempImg, canvas, runtimeSettings = getRuntimePref
     const fallbackScale = resolveWebGlFallbackScale(settings);
 
     try {
-        engine.attachSource(tempImg, canvas);
+        const processingCanvas = ensureWebGlEngineAttachment(engine, tempImg);
         engine.upscale();
+        copyWebGlOutputToTargetCanvas(processingCanvas, canvas);
     } catch (error) {
         runtimeLog('webgl:fallback-2d', {
             reason: 'webgl-error',
@@ -224,8 +339,6 @@ async function runAnime4KWebGl(tempImg, canvas, runtimeSettings = getRuntimePref
         });
         await upscaleWith2dFallback(tempImg, canvas, fallbackScale);
         return `2D_FALLBACK_${fallbackScale}X`;
-    } finally {
-        engine.detachSource();
     }
 
     if (canvas.width > 0 && canvas.height > 0) {
