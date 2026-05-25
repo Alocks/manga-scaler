@@ -9,9 +9,15 @@ let webgpuVertexModule = null;
 let webgpuFragmentModule = null;
 let webgpuRenderPipelineLayout = null;
 const webgpuCanvasContextCache = new WeakMap();
-const WEBGPU_WAIT_FOR_SUBMISSION = false;
-let webgpuProcessingCache = null;
-let webgpuTileScratchCache = null;
+const webgpuCanvasSizeCache = new WeakMap();
+let webgpuPreferredCanvasFormat = null;
+const WEBGPU_PROCESSING_CACHE_MAX_ENTRIES = 6;
+const webgpuProcessingCacheByKey = new Map();
+let webgpuProcessingCacheTick = 0;
+const webgpuPreparedImageBitmapCache = new Map();
+let webgpuTiledComposeCache = null;
+let webgpuTiledInputScratchCache = null;
+const WEBGPU_TILE_INPUT_SCRATCH_SIZE = 1024;
 const WEBGPU_MODEL_CTOR_NAMES = ['Anime4K', 'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'];
 
 function getWebGpuLibrary() {
@@ -128,67 +134,480 @@ function resetWebGpuAdapterState() {
     webgpuVertexModule = null;
     webgpuFragmentModule = null;
     webgpuRenderPipelineLayout = null;
+    webgpuPreferredCanvasFormat = null;
     disposeWebGpuProcessingCache();
-    disposeWebGpuTileScratchCache();
+    disposeWebGpuPreparedImageBitmapCache();
+    disposeWebGpuTiledComposeCache();
+    disposeWebGpuTiledInputScratchCache();
+}
+
+function getWebGpuPreferredCanvasFormat() {
+    if (webgpuPreferredCanvasFormat) {
+        return webgpuPreferredCanvasFormat;
+    }
+
+    webgpuPreferredCanvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    return webgpuPreferredCanvasFormat;
 }
 
 function disposeWebGpuProcessingCache() {
-    if (!webgpuProcessingCache) return;
+    if (webgpuProcessingCacheByKey.size <= 0) return;
+
+    for (const entry of webgpuProcessingCacheByKey.values()) {
+        disposeWebGpuProcessingEntry(entry);
+    }
+
+    webgpuProcessingCacheByKey.clear();
+}
+
+function disposeWebGpuProcessingEntry(entry) {
+    if (!entry) return;
 
     try {
-        webgpuProcessingCache.inputTexture?.destroy?.();
+        entry.anime?.destroy?.();
     } catch {}
 
     try {
-        webgpuProcessingCache.outputTexture?.destroy?.();
+        entry.anime?.dispose?.();
     } catch {}
 
-    webgpuProcessingCache = null;
-}
+    try {
+        entry.pipeline?.destroy?.();
+    } catch {}
 
-function disposeWebGpuTileScratchCache() {
-    if (!webgpuTileScratchCache) return;
+    try {
+        entry.pipeline?.dispose?.();
+    } catch {}
 
-    webgpuTileScratchCache.sourceCanvas.width = 0;
-    webgpuTileScratchCache.sourceCanvas.height = 0;
-    webgpuTileScratchCache.outputCanvas.width = 0;
-    webgpuTileScratchCache.outputCanvas.height = 0;
-    webgpuTileScratchCache = null;
-}
-
-function getOrCreateWebGpuTileScratchCache() {
-    if (webgpuTileScratchCache) {
-        return webgpuTileScratchCache;
+    if (entry.ownsInputTexture !== false) {
+        try {
+            entry.inputTexture?.destroy?.();
+        } catch {}
     }
 
-    const sourceCanvas = document.createElement('canvas');
-    const sourceCtx = sourceCanvas.getContext('2d', { alpha: true, desynchronized: true });
-    if (!sourceCtx) {
-        throw new Error('WebGPU tiled mode failed to create reusable tile source context');
+    try {
+        entry.outputTexture?.destroy?.();
+    } catch {}
+}
+
+function touchWebGpuProcessingEntry(entry) {
+    entry.lastUsedTick = ++webgpuProcessingCacheTick;
+}
+
+function evictWebGpuProcessingCacheEntries() {
+    if (webgpuProcessingCacheByKey.size <= WEBGPU_PROCESSING_CACHE_MAX_ENTRIES) {
+        return;
     }
 
-    sourceCtx.imageSmoothingEnabled = false;
+    const entries = [...webgpuProcessingCacheByKey.entries()];
+    entries.sort((a, b) => {
+        const aTick = Number.isFinite(a[1]?.lastUsedTick) ? a[1].lastUsedTick : 0;
+        const bTick = Number.isFinite(b[1]?.lastUsedTick) ? b[1].lastUsedTick : 0;
+        return aTick - bTick;
+    });
 
-    webgpuTileScratchCache = {
-        sourceCanvas,
-        sourceCtx,
-        outputCanvas: document.createElement('canvas')
+    const removeCount = webgpuProcessingCacheByKey.size - WEBGPU_PROCESSING_CACHE_MAX_ENTRIES;
+    for (let i = 0; i < removeCount; i++) {
+        const [key, entry] = entries[i] || [];
+        if (!key) continue;
+        webgpuProcessingCacheByKey.delete(key);
+        disposeWebGpuProcessingEntry(entry);
+    }
+}
+
+function getWebGpuProcessingCacheEntry(cacheKey, device) {
+    const entry = webgpuProcessingCacheByKey.get(cacheKey);
+    if (!entry) {
+        return null;
+    }
+
+    if (entry.device !== device) {
+        webgpuProcessingCacheByKey.delete(cacheKey);
+        disposeWebGpuProcessingEntry(entry);
+        return null;
+    }
+
+    entry.cacheHit = true;
+    touchWebGpuProcessingEntry(entry);
+    return entry;
+}
+
+function setWebGpuProcessingCacheEntry(cacheKey, entry) {
+    touchWebGpuProcessingEntry(entry);
+    webgpuProcessingCacheByKey.set(cacheKey, entry);
+    evictWebGpuProcessingCacheEntries();
+    return entry;
+}
+
+function disposeWebGpuTiledComposeCache() {
+    if (!webgpuTiledComposeCache) return;
+
+    try {
+        webgpuTiledComposeCache.texture?.destroy?.();
+    } catch {}
+
+    webgpuTiledComposeCache = null;
+}
+
+function disposeWebGpuTiledInputScratchCache() {
+    if (!webgpuTiledInputScratchCache) return;
+
+    try {
+        webgpuTiledInputScratchCache.texture?.destroy?.();
+    } catch {}
+
+    webgpuTiledInputScratchCache = null;
+}
+
+function getOrCreateWebGpuTiledInputScratch(device, maxTextureDimension2D) {
+    const size = Math.max(1, Math.min(WEBGPU_TILE_INPUT_SCRATCH_SIZE, maxTextureDimension2D || WEBGPU_TILE_INPUT_SCRATCH_SIZE));
+
+    if (
+        webgpuTiledInputScratchCache &&
+        webgpuTiledInputScratchCache.device === device &&
+        webgpuTiledInputScratchCache.size === size
+    ) {
+        return webgpuTiledInputScratchCache;
+    }
+
+    disposeWebGpuTiledInputScratchCache();
+
+    const texture = device.createTexture({
+        size: [size, size, 1],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.STORAGE_BINDING
+    });
+
+    webgpuTiledInputScratchCache = {
+        device,
+        size,
+        texture
     };
 
-    return webgpuTileScratchCache;
+    return webgpuTiledInputScratchCache;
 }
 
-function resizeCanvasIfNeeded(canvas, width, height) {
-    if (canvas.width !== width) {
-        canvas.width = width;
+function getOrCreateWebGpuTiledComposeCache(device, width, height) {
+    const format = 'rgba16float';
+    if (
+        webgpuTiledComposeCache &&
+        webgpuTiledComposeCache.device === device &&
+        webgpuTiledComposeCache.width === width &&
+        webgpuTiledComposeCache.height === height &&
+        webgpuTiledComposeCache.format === format
+    ) {
+        return webgpuTiledComposeCache;
     }
-    if (canvas.height !== height) {
-        canvas.height = height;
+
+    disposeWebGpuTiledComposeCache();
+
+    const texture = device.createTexture({
+        size: [width, height, 1],
+        format,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+    });
+
+    webgpuTiledComposeCache = {
+        device,
+        width,
+        height,
+        format,
+        texture,
+        textureView: texture.createView(),
+        presentCarrier: {
+            outputTexture: texture,
+            outputTextureView: null,
+            presentBindGroup: null,
+            presentBindGroupDevice: null
+        }
+    };
+
+    return webgpuTiledComposeCache;
+}
+
+function disposeWebGpuPreparedImageBitmapCache() {
+    if (webgpuPreparedImageBitmapCache.size <= 0) return;
+
+    for (const cached of webgpuPreparedImageBitmapCache.values()) {
+        try {
+            cached.bitmap?.close?.();
+        } catch {}
     }
+
+    webgpuPreparedImageBitmapCache.clear();
+}
+
+function getWebGpuImageSourceCacheKey(sourceImage) {
+    const src = sourceImage.currentSrc || sourceImage.src || '';
+    const width = sourceImage.naturalWidth || sourceImage.width || 0;
+    const height = sourceImage.naturalHeight || sourceImage.height || 0;
+    return `${src}|${width}x${height}`;
+}
+
+async function createWebGpuUploadSource(sourceImage) {
+    if (typeof ImageBitmap !== 'undefined' && sourceImage instanceof ImageBitmap) {
+        return { source: sourceImage, dispose: null, sourceType: 'direct-imagebitmap' };
+    }
+
+    if (typeof VideoFrame !== 'undefined' && sourceImage instanceof VideoFrame) {
+        return { source: sourceImage, dispose: null, sourceType: 'direct-videoframe' };
+    }
+
+    if (typeof HTMLVideoElement !== 'undefined' && sourceImage instanceof HTMLVideoElement) {
+        return { source: sourceImage, dispose: null, sourceType: 'direct-video' };
+    }
+
+    if (typeof HTMLCanvasElement !== 'undefined' && sourceImage instanceof HTMLCanvasElement) {
+        return { source: sourceImage, dispose: null, sourceType: 'direct-canvas' };
+    }
+
+    if (typeof OffscreenCanvas !== 'undefined' && sourceImage instanceof OffscreenCanvas) {
+        return { source: sourceImage, dispose: null, sourceType: 'direct-offscreen-canvas' };
+    }
+
+    if (typeof HTMLImageElement !== 'undefined' && sourceImage instanceof HTMLImageElement) {
+        if (typeof createImageBitmap !== 'function') {
+            return { source: sourceImage, dispose: null, sourceType: 'direct-image' };
+        }
+
+        const cacheKey = getWebGpuImageSourceCacheKey(sourceImage);
+        const cached = webgpuPreparedImageBitmapCache.get(sourceImage);
+        if (cached && cached.cacheKey === cacheKey && cached.bitmap) {
+            return { source: cached.bitmap, dispose: null, sourceType: 'imageBitmap-cached' };
+        }
+
+        try {
+            const bitmap = await createImageBitmap(sourceImage, {
+                premultiplyAlpha: 'none',
+                colorSpaceConversion: 'none'
+            });
+
+            if (cached?.bitmap && cached.bitmap !== bitmap) {
+                try {
+                    cached.bitmap.close?.();
+                } catch {}
+            }
+
+            webgpuPreparedImageBitmapCache.set(sourceImage, { cacheKey, bitmap });
+            return { source: bitmap, sourceType: 'imageBitmap-prepared', dispose: null };
+        } catch {
+            return { source: sourceImage, dispose: null, sourceType: 'direct-image-fallback' };
+        }
+    }
+
+    if (typeof createImageBitmap !== 'function') {
+        return { source: sourceImage, dispose: null, sourceType: 'direct' };
+    }
+
+    try {
+        const bitmap = await createImageBitmap(sourceImage, {
+            premultiplyAlpha: 'none',
+            colorSpaceConversion: 'none'
+        });
+        return {
+            source: bitmap,
+            sourceType: 'imageBitmap',
+            dispose() {
+                try {
+                    bitmap.close?.();
+                } catch {}
+            }
+        };
+    } catch {
+        return { source: sourceImage, dispose: null, sourceType: 'direct' };
+    }
+}
+
+function encodeWebGpuBlitPass({
+    encoder,
+    targetTextureView,
+    renderPipeline,
+    bindGroup,
+    loadOp,
+    clearValue,
+    viewport
+}) {
+    const colorAttachment = {
+        view: targetTextureView,
+        loadOp,
+        storeOp: 'store'
+    };
+
+    if (loadOp === 'clear' && clearValue) {
+        colorAttachment.clearValue = clearValue;
+    }
+
+    const pass = encoder.beginRenderPass({ colorAttachments: [colorAttachment] });
+    pass.setPipeline(renderPipeline);
+    pass.setBindGroup(0, bindGroup);
+
+    if (viewport) {
+        pass.setViewport(viewport.x, viewport.y, viewport.width, viewport.height, 0, 1);
+        pass.setScissorRect(viewport.x, viewport.y, viewport.width, viewport.height);
+    }
+
+    pass.draw(6);
+    pass.end();
+}
+
+function encodeWebGpuProcessingPass(processing, encoder) {
+    const outputTexture = processing.outputTexture;
+
+    if (processing.kind === 'anime4k') {
+        processing.anime.render(outputTexture, encoder);
+    } else {
+        processing.pipeline.pass(encoder);
+    }
+
+    if (!outputTexture) {
+        throw new Error('anime4k-webgpu did not produce an output texture');
+    }
+
+    return outputTexture;
+}
+
+function copyExternalImageToInputTexture({
+    device,
+    uploadSource,
+    sourceOriginX,
+    sourceOriginY,
+    inputTexture,
+    width,
+    height,
+    timingTarget
+}) {
+    const uploadStartAt = timingTarget ? getProfileNow() : 0;
+    const externalSource = { source: uploadSource };
+    if (sourceOriginX !== 0 || sourceOriginY !== 0) {
+        externalSource.origin = [sourceOriginX, sourceOriginY];
+    }
+    const uploadConfiguredAt = timingTarget ? getProfileNow() : 0;
+
+    device.queue.copyExternalImageToTexture(
+        externalSource,
+        { texture: inputTexture },
+        [width, height]
+    );
+
+    const uploadCopiedAt = timingTarget ? getProfileNow() : 0;
+
+    if (timingTarget) {
+        timingTarget.textureUploadStartAt = uploadStartAt;
+        timingTarget.externalSourceReadyAt = uploadConfiguredAt;
+        timingTarget.copyExternalImageCompleteAt = uploadCopiedAt;
+        timingTarget.copyCompleteAt = uploadCopiedAt;
+    }
+
+    return {
+        uploadStartAt,
+        uploadConfiguredAt,
+        uploadCopiedAt
+    };
+}
+
+function buildWebGpuTextureUploadProfile({
+    nativeWidth,
+    nativeHeight,
+    sourceOriginX,
+    sourceOriginY,
+    uploadSourceType,
+    timings
+}) {
+    const uploadPixelCount = nativeWidth * nativeHeight;
+    const estimatedUploadBytes = estimateRgba16FloatUploadBytes(nativeWidth, nativeHeight);
+
+    return {
+        sourceType: uploadSourceType,
+        subRegionUpload: sourceOriginX !== 0 || sourceOriginY !== 0,
+        sourceOriginX,
+        sourceOriginY,
+        uploadWidth: nativeWidth,
+        uploadHeight: nativeHeight,
+        uploadPixelCount,
+        estimatedRgba16FloatUploadBytes: estimatedUploadBytes,
+        estimatedRgba16FloatUploadMiB: roundProfileDuration(estimatedUploadBytes / (1024 * 1024)),
+        durationsMs: formatWebGpuProfileDurations({
+            total: timings.copyCompleteAt - timings.textureUploadStartAt,
+            externalSourceConfig: timings.externalSourceReadyAt - timings.textureUploadStartAt,
+            copyExternalImageCall: timings.copyExternalImageCompleteAt - timings.externalSourceReadyAt
+        })
+    };
+}
+
+function buildWebGpuSingleDurationsMs(timings) {
+    return formatWebGpuProfileDurations({
+        total: timings.submitAt - timings.totalStart,
+        pipelineSetup: timings.pipelineReadyAt - timings.totalStart,
+        textureUpload: timings.copyCompleteAt - timings.pipelineReadyAt,
+        textureUploadExternalSourceConfig: timings.externalSourceReadyAt - timings.textureUploadStartAt,
+        textureUploadCopyExternalImageCall: timings.copyExternalImageCompleteAt - timings.externalSourceReadyAt,
+        processEncode: timings.processPassEncodedAt - timings.copyCompleteAt,
+        presentEncode: timings.renderPassEncodedAt - timings.processPassEncodedAt,
+        submit: timings.submitAt - timings.renderPassEncodedAt
+    });
+}
+
+function buildWebGpuTiledDurationsMs({
+    tiledTimingStart,
+    tileExtractionMs,
+    tileSingleRunMs,
+    tileComposeMs,
+    tileUploadTotalMs,
+    tileUploadConfigMs,
+    tileUploadCopyCallMs,
+    tileCount
+}) {
+    return formatWebGpuProfileDurations({
+        total: getProfileNow() - tiledTimingStart,
+        tileExtraction: tileExtractionMs,
+        tileSingleRun: tileSingleRunMs,
+        tileCompose: tileComposeMs,
+        tileUploadTotal: tileUploadTotalMs,
+        tileUploadExternalSourceConfig: tileUploadConfigMs,
+        tileUploadCopyExternalImageCall: tileUploadCopyCallMs,
+        tileUploadTotalAvg: tileCount > 0 ? (tileUploadTotalMs / tileCount) : 0,
+        tileUploadCopyExternalImageCallAvg: tileCount > 0 ? (tileUploadCopyCallMs / tileCount) : 0
+    });
+}
+
+function buildWebGpuUpscaleDurationsMs({
+    upscaleStart,
+    uploadSourcePrepareMs,
+    uploadDurations
+}) {
+    return formatWebGpuProfileDurations({
+        total: getProfileNow() - upscaleStart,
+        uploadSourcePrepare: uploadSourcePrepareMs,
+        textureUpload: uploadDurations.total,
+        textureUploadExternalSourceConfig: uploadDurations.externalSourceConfig,
+        textureUploadCopyExternalImageCall: uploadDurations.copyExternalImageCall
+    });
+}
+
+function ensureWebGpuCanvasTargetSize(canvas, width, height) {
+    const cached = webgpuCanvasSizeCache.get(canvas);
+    if (cached && cached.width === width && cached.height === height) {
+        return;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    webgpuCanvasSizeCache.set(canvas, { width, height });
 }
 
 function roundProfileDuration(value) {
     return Math.round(value * 1000) / 1000;
+}
+
+function estimateRgba16FloatUploadBytes(width, height) {
+    const w = Number(width);
+    const h = Number(height);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+        return 0;
+    }
+
+    const bytesPerPixel = 8;
+    return Math.round(w * h * bytesPerPixel);
 }
 
 function getProfileNow() {
@@ -234,7 +653,9 @@ function getOrCreateWebGpuProcessingPipeline({
     nativeWidth,
     nativeHeight,
     targetWidth,
-    targetHeight
+    targetHeight,
+    inputTextureOverride = null,
+    inputTextureOverrideKey = ''
 }) {
     const presetCtor = typeof lib.Anime4K === 'function' ? null : getWebGpuPresetCtor(lib, settings);
     if (!lib.Anime4K && !presetCtor) {
@@ -252,24 +673,23 @@ function getOrCreateWebGpuProcessingPipeline({
         nativeHeight,
         targetWidth,
         targetHeight
-    });
+    }) + (inputTextureOverrideKey ? `|in:${inputTextureOverrideKey}` : '');
 
     if (
-        webgpuProcessingCache &&
-        webgpuProcessingCache.device === device &&
-        webgpuProcessingCache.key === cacheKey
+        webgpuProcessingCacheByKey.size > 0
     ) {
-        webgpuProcessingCache.cacheHit = true;
-        return webgpuProcessingCache;
+        const cached = getWebGpuProcessingCacheEntry(cacheKey, device);
+        if (cached) {
+            return cached;
+        }
     }
 
-    disposeWebGpuProcessingCache();
-
-    const inputTexture = device.createTexture({
+    const inputTexture = inputTextureOverride || device.createTexture({
         size: [nativeWidth, nativeHeight, 1],
-        format: 'rgba16float',
+        format: 'rgba8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.STORAGE_BINDING
     });
+    const ownsInputTexture = !inputTextureOverride;
 
     if (kind === 'anime4k') {
         const outputTexture = device.createTexture({
@@ -279,20 +699,23 @@ function getOrCreateWebGpuProcessingPipeline({
         });
 
         const anime = new lib.Anime4K(device, inputTexture);
-        webgpuProcessingCache = {
+        const entry = {
             key: cacheKey,
             device,
             kind,
             modelUsed: modelName,
             inputTexture,
+            ownsInputTexture,
             outputTexture,
             anime,
             pipeline: null,
             cacheHit: false,
             outputTextureView: null,
             presentBindGroup: null,
-            presentBindGroupDevice: null
+            presentBindGroupDevice: null,
+            lastUsedTick: 0
         };
+        return setWebGpuProcessingCacheEntry(cacheKey, entry);
     } else {
         const pipeline = new presetCtor({
             device,
@@ -306,23 +729,24 @@ function getOrCreateWebGpuProcessingPipeline({
         }
 
         const outputTexture = pipeline.getOutputTexture();
-        webgpuProcessingCache = {
+        const entry = {
             key: cacheKey,
             device,
             kind,
             modelUsed: modelName,
             inputTexture,
+            ownsInputTexture,
             outputTexture,
             anime: null,
             pipeline,
             cacheHit: false,
             outputTextureView: null,
             presentBindGroup: null,
-            presentBindGroupDevice: null
+            presentBindGroupDevice: null,
+            lastUsedTick: 0
         };
+        return setWebGpuProcessingCacheEntry(cacheKey, entry);
     }
-
-    return webgpuProcessingCache;
 }
 
 function getOrCreateWebGpuPresentBindGroup(processing, device) {
@@ -364,8 +788,13 @@ function getWebGpuRenderResources(device) {
     if (!webgpuVertexModule) {
         webgpuVertexModule = device.createShaderModule({
             code: `
+struct VSOut {
+    @builtin(position) position : vec4<f32>,
+    @location(0) uv : vec2<f32>
+};
+
 @vertex
-fn main(@builtin(vertex_index) vertexIndex : u32) -> @builtin(position) vec4<f32> {
+fn main(@builtin(vertex_index) vertexIndex : u32) -> VSOut {
     var positions = array<vec2<f32>, 6>(
         vec2<f32>(-1.0, -1.0),
         vec2<f32>(1.0, -1.0),
@@ -374,8 +803,20 @@ fn main(@builtin(vertex_index) vertexIndex : u32) -> @builtin(position) vec4<f32
         vec2<f32>(1.0, -1.0),
         vec2<f32>(1.0, 1.0)
     );
+    var uvs = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(1.0, 0.0)
+    );
+
+    var out : VSOut;
     let p = positions[vertexIndex];
-    return vec4<f32>(p, 0.0, 1.0);
+    out.position = vec4<f32>(p, 0.0, 1.0);
+    out.uv = uvs[vertexIndex];
+    return out;
 }
 `
         });
@@ -387,11 +828,13 @@ fn main(@builtin(vertex_index) vertexIndex : u32) -> @builtin(position) vec4<f32
 @group(0) @binding(0) var linearSampler : sampler;
 @group(0) @binding(1) var sourceTex : texture_2d<f32>;
 
+struct FSIn {
+    @location(0) uv : vec2<f32>
+};
+
 @fragment
-fn main(@builtin(position) pos : vec4<f32>) -> @location(0) vec4<f32> {
-    let dims = vec2<f32>(textureDimensions(sourceTex, 0));
-    let uv = pos.xy / dims;
-    return textureSample(sourceTex, linearSampler, uv);
+fn main(input : FSIn) -> @location(0) vec4<f32> {
+    return textureSample(sourceTex, linearSampler, input.uv);
 }
 `
         });
@@ -436,22 +879,35 @@ function getOrCreateWebGpuCanvasContext(canvas, device, format) {
         if (!context) {
             throw new Error('Failed to acquire WebGPU canvas context');
         }
-        cached = { context, configuredDevice: null, configuredFormat: null };
+        cached = { context, configuredDevice: null, configuredFormat: null, configured: false };
         webgpuCanvasContextCache.set(canvas, cached);
     }
 
-    if (cached.configuredDevice !== device || cached.configuredFormat !== format) {
+    const needsConfigure =
+        !cached.configured ||
+        cached.configuredDevice !== device ||
+        cached.configuredFormat !== format;
+
+    if (needsConfigure) {
         cached.context.configure({ device, format, alphaMode: 'premultiplied' });
         cached.configuredDevice = device;
         cached.configuredFormat = format;
+        cached.configured = true;
     }
 
     return cached.context;
 }
 
-async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, maxTextureDimension2D) {
-    const nativeWidth = sourceImage.naturalWidth || sourceImage.width;
-    const nativeHeight = sourceImage.naturalHeight || sourceImage.height;
+async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, maxTextureDimension2D, uploadOptions = {}) {
+    const sourceWidth = uploadOptions.sourceWidth || sourceImage.naturalWidth || sourceImage.width;
+    const sourceHeight = uploadOptions.sourceHeight || sourceImage.naturalHeight || sourceImage.height;
+    const uploadSource = uploadOptions.uploadSource || sourceImage;
+    const uploadSourceType = uploadOptions.uploadSourceType || 'unknown';
+    const sourceOriginX = uploadOptions.sourceOriginX || 0;
+    const sourceOriginY = uploadOptions.sourceOriginY || 0;
+
+    const nativeWidth = sourceWidth;
+    const nativeHeight = sourceHeight;
     if (
         !Number.isFinite(nativeWidth) ||
         !Number.isFinite(nativeHeight) ||
@@ -506,61 +962,45 @@ async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, max
         timings.pipelineReadyAt = getProfileNow();
     }
 
-    device.queue.copyExternalImageToTexture(
-        { source: sourceImage },
-        { texture: processing.inputTexture },
-        [nativeWidth, nativeHeight]
-    );
-
-    if (timings) {
-        timings.copyCompleteAt = getProfileNow();
-    }
+    copyExternalImageToInputTexture({
+        device,
+        uploadSource,
+        sourceOriginX,
+        sourceOriginY,
+        inputTexture: processing.inputTexture,
+        width: nativeWidth,
+        height: nativeHeight,
+        timingTarget: timings
+    });
 
     const encoder = device.createCommandEncoder();
-    let outputTexture = null;
     let modelUsed = processing.modelUsed;
-
-    if (processing.kind === 'anime4k') {
-        outputTexture = processing.outputTexture;
-        processing.anime.render(outputTexture, encoder);
-    } else {
-        outputTexture = processing.outputTexture;
-        processing.pipeline.pass(encoder);
-    }
-
-    if (!outputTexture) {
-        throw new Error('anime4k-webgpu did not produce an output texture');
-    }
+    const outputTexture = encodeWebGpuProcessingPass(processing, encoder);
 
     if (timings) {
         timings.processPassEncodedAt = getProfileNow();
     }
 
-    if (canvas.width !== outputTexture.width) {
-        canvas.width = outputTexture.width;
-    }
-    if (canvas.height !== outputTexture.height) {
-        canvas.height = outputTexture.height;
+    if (canvas.width !== outputTexture.width || canvas.height !== outputTexture.height) {
+        throw new Error(
+            `WebGPU output canvas size mismatch: canvas=${canvas.width}x${canvas.height}, output=${outputTexture.width}x${outputTexture.height}`
+        );
     }
 
-    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    const canvasFormat = getWebGpuPreferredCanvasFormat();
     const context = getOrCreateWebGpuCanvasContext(canvas, device, canvasFormat);
 
     const renderPipeline = getOrCreateWebGpuRenderPipeline(device, canvasFormat);
     const bindGroup = getOrCreateWebGpuPresentBindGroup(processing, device);
 
-    const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-            view: context.getCurrentTexture().createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
+    encodeWebGpuBlitPass({
+        encoder,
+        targetTextureView: context.getCurrentTexture().createView(),
+        renderPipeline,
+        bindGroup,
+        loadOp: 'clear',
+        clearValue: { r: 0, g: 0, b: 0, a: 1 }
     });
-    pass.setPipeline(renderPipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.draw(6);
-    pass.end();
 
     if (timings) {
         timings.renderPassEncodedAt = getProfileNow();
@@ -574,21 +1014,31 @@ async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, max
 
     if (profiling?.enabled) {
         const submittedWorkDoneAt = getProfileNow();
+        const textureUploadDetails = buildWebGpuTextureUploadProfile({
+            nativeWidth,
+            nativeHeight,
+            sourceOriginX,
+            sourceOriginY,
+            uploadSourceType,
+            timings
+        });
+
         profiling.emit('webgpu-single', {
             modelUsed,
             cacheHit: !!processing.cacheHit,
             processingKind: processing.kind,
-            durationsMs: formatWebGpuProfileDurations({
-                total: timings.submitAt - timings.totalStart,
-                pipelineSetup: timings.pipelineReadyAt - timings.totalStart,
-                textureUpload: timings.copyCompleteAt - timings.pipelineReadyAt,
-                processEncode: timings.processPassEncodedAt - timings.copyCompleteAt,
-                presentEncode: timings.renderPassEncodedAt - timings.processPassEncodedAt,
-                submit: timings.submitAt - timings.renderPassEncodedAt
-            }),
+            durationsMs: buildWebGpuSingleDurationsMs(timings),
+            textureUploadDetails,
             gpuExecutionOmitted: true,
             profileTimestamp: roundProfileDuration(submittedWorkDoneAt)
         });
+
+        return {
+            modelUsed,
+            width: canvas.width,
+            height: canvas.height,
+            uploadProfile: textureUploadDetails
+        };
     }
 
     return { modelUsed, width: canvas.width, height: canvas.height };
@@ -598,11 +1048,12 @@ async function runAnime4KWebGpuTiled(tempImg, canvas, settings, device, maxTextu
     const nativeWidth = tempImg.naturalWidth || tempImg.width;
     const nativeHeight = tempImg.naturalHeight || tempImg.height;
     const scale = settings.selectedWebGpuScale;
+    const tiledInputScratch = getOrCreateWebGpuTiledInputScratch(device, maxTextureDimension2D);
 
     const maxSourceTileWidth = Math.max(1, Math.floor(maxTextureDimension2D / scale));
     const maxSourceTileHeight = Math.max(1, Math.floor(maxTextureDimension2D / scale));
-    const sourceTileWidth = Math.min(nativeWidth, maxSourceTileWidth);
-    const sourceTileHeight = Math.min(nativeHeight, maxSourceTileHeight);
+    const sourceTileWidth = Math.min(nativeWidth, maxSourceTileWidth, tiledInputScratch.size);
+    const sourceTileHeight = Math.min(nativeHeight, maxSourceTileHeight, tiledInputScratch.size);
 
     if (sourceTileWidth <= 0 || sourceTileHeight <= 0) {
         throw new Error(`WebGPU tiled mode failed to compute tile size for max=${maxTextureDimension2D}, scale=${scale}`);
@@ -622,92 +1073,139 @@ async function runAnime4KWebGpuTiled(tempImg, canvas, settings, device, maxTextu
         maxTextureDimension2D
     });
     const tiledTimingStart = profiling ? getProfileNow() : 0;
-    canvas.width = finalTargetWidth;
-    canvas.height = finalTargetHeight;
+    ensureWebGpuCanvasTargetSize(canvas, finalTargetWidth, finalTargetHeight);
 
     if (canvas.width !== finalTargetWidth || canvas.height !== finalTargetHeight) {
         throw new Error(`WebGPU tiled output canvas rejected size: ${finalTargetWidth}x${finalTargetHeight}`);
     }
 
-    const composeCtx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-    if (!composeCtx) {
-        throw new Error('WebGPU tiled mode failed to acquire 2D canvas context for composition');
+    const lib = getWebGpuLibrary();
+    if (!lib) {
+        throw new Error('anime4k-webgpu runtime is not loaded on window');
     }
 
-    composeCtx.imageSmoothingEnabled = false;
-    composeCtx.clearRect(0, 0, finalTargetWidth, finalTargetHeight);
+    const canvasFormat = getWebGpuPreferredCanvasFormat();
+    const canvasContext = getOrCreateWebGpuCanvasContext(canvas, device, canvasFormat);
+    const composeCache = getOrCreateWebGpuTiledComposeCache(device, finalTargetWidth, finalTargetHeight);
+    const composePipeline = getOrCreateWebGpuRenderPipeline(device, composeCache.format);
+    const composePresentBindGroup = getOrCreateWebGpuPresentBindGroup(composeCache.presentCarrier, device);
 
-    const tileScratch = getOrCreateWebGpuTileScratchCache();
-    const tileSourceCanvas = tileScratch.sourceCanvas;
-    const tileSourceCtx = tileScratch.sourceCtx;
-    const tileOutputCanvas = tileScratch.outputCanvas;
+    const uploadSourceHandle = await createWebGpuUploadSource(tempImg);
+    const uploadSource = uploadSourceHandle.source;
 
     let modelUsed = settings.selectedWebGpuModel;
     let tileCount = 0;
     let tileExtractionMs = 0;
     let tileSingleRunMs = 0;
     let tileComposeMs = 0;
+    let tileUploadConfigMs = 0;
+    let tileUploadCopyCallMs = 0;
+    let tileUploadTotalMs = 0;
 
-    for (let sourceY = 0; sourceY < nativeHeight; sourceY += sourceTileHeight) {
-        const tileSourceHeight = Math.min(sourceTileHeight, nativeHeight - sourceY);
+    try {
+        const encoder = device.createCommandEncoder();
 
-        for (let sourceX = 0; sourceX < nativeWidth; sourceX += sourceTileWidth) {
-            const tileSourceWidth = Math.min(sourceTileWidth, nativeWidth - sourceX);
+        const clearComposePass = encoder.beginRenderPass({
+            colorAttachments: [{
+                view: composeCache.textureView,
+                clearValue: { r: 0, g: 0, b: 0, a: 1 },
+                loadOp: 'clear',
+                storeOp: 'store'
+            }]
+        });
+        clearComposePass.end();
 
-            const tileExtractionStart = profiling ? getProfileNow() : 0;
-            resizeCanvasIfNeeded(tileSourceCanvas, tileSourceWidth, tileSourceHeight);
-            tileSourceCtx.clearRect(0, 0, tileSourceWidth, tileSourceHeight);
-            tileSourceCtx.drawImage(
-                tempImg,
-                sourceX,
-                sourceY,
-                tileSourceWidth,
-                tileSourceHeight,
-                0,
-                0,
-                tileSourceWidth,
-                tileSourceHeight
-            );
-            if (profiling) {
-                tileExtractionMs += getProfileNow() - tileExtractionStart;
+        for (let sourceY = 0; sourceY < nativeHeight; sourceY += sourceTileHeight) {
+            const tileSourceHeight = Math.min(sourceTileHeight, nativeHeight - sourceY);
+
+            for (let sourceX = 0; sourceX < nativeWidth; sourceX += sourceTileWidth) {
+                const tileSourceWidth = Math.min(sourceTileWidth, nativeWidth - sourceX);
+                const tileTargetWidth = Math.max(1, Math.round(tileSourceWidth * scale));
+                const tileTargetHeight = Math.max(1, Math.round(tileSourceHeight * scale));
+                const targetX = Math.round(sourceX * scale);
+                const targetY = Math.round(sourceY * scale);
+
+                const tileExtractionStart = profiling ? getProfileNow() : 0;
+                const tileUploadOptions = {
+                    uploadSource,
+                    uploadSourceType: uploadSourceHandle.sourceType,
+                    sourceWidth: tileSourceWidth,
+                    sourceHeight: tileSourceHeight,
+                    sourceOriginX: sourceX,
+                    sourceOriginY: sourceY
+                };
+                if (profiling) {
+                    tileExtractionMs += getProfileNow() - tileExtractionStart;
+                }
+
+                const tileSingleRunStart = profiling ? getProfileNow() : 0;
+                const processing = getOrCreateWebGpuProcessingPipeline({
+                    lib,
+                    device,
+                    settings,
+                    nativeWidth: tileSourceWidth,
+                    nativeHeight: tileSourceHeight,
+                    targetWidth: tileTargetWidth,
+                    targetHeight: tileTargetHeight,
+                    inputTextureOverride: tiledInputScratch.texture,
+                    inputTextureOverrideKey: `tile-scratch-${tiledInputScratch.size}`
+                });
+
+                const uploadTiming = copyExternalImageToInputTexture({
+                    device,
+                    uploadSource,
+                    sourceOriginX: tileUploadOptions.sourceOriginX,
+                    sourceOriginY: tileUploadOptions.sourceOriginY,
+                    inputTexture: processing.inputTexture,
+                    width: tileSourceWidth,
+                    height: tileSourceHeight,
+                    timingTarget: profiling ? {} : null
+                });
+
+                encodeWebGpuProcessingPass(processing, encoder);
+
+                const tileBindGroup = getOrCreateWebGpuPresentBindGroup(processing, device);
+                const tileComposeStart = profiling ? getProfileNow() : 0;
+                encodeWebGpuBlitPass({
+                    encoder,
+                    targetTextureView: composeCache.textureView,
+                    renderPipeline: composePipeline,
+                    bindGroup: tileBindGroup,
+                    loadOp: 'load',
+                    viewport: {
+                        x: targetX,
+                        y: targetY,
+                        width: tileTargetWidth,
+                        height: tileTargetHeight
+                    }
+                });
+                if (profiling) {
+                    tileComposeMs += getProfileNow() - tileComposeStart;
+                    tileSingleRunMs += getProfileNow() - tileSingleRunStart;
+                    tileUploadConfigMs += uploadTiming.uploadConfiguredAt - uploadTiming.uploadStartAt;
+                    tileUploadCopyCallMs += uploadTiming.uploadCopiedAt - uploadTiming.uploadConfiguredAt;
+                    tileUploadTotalMs += uploadTiming.uploadCopiedAt - uploadTiming.uploadStartAt;
+                }
+
+                modelUsed = processing.modelUsed;
+
+                tileCount++;
             }
-
-            const tileSingleRunStart = profiling ? getProfileNow() : 0;
-            const tileResult = await runAnime4KWebGpuSingle(
-                tileSourceCanvas,
-                tileOutputCanvas,
-                settings,
-                device,
-                maxTextureDimension2D
-            );
-            if (profiling) {
-                tileSingleRunMs += getProfileNow() - tileSingleRunStart;
-            }
-            modelUsed = tileResult.modelUsed;
-
-            const targetX = Math.round(sourceX * scale);
-            const targetY = Math.round(sourceY * scale);
-            const targetWidth = tileResult.width;
-            const targetHeight = tileResult.height;
-
-            const tileComposeStart = profiling ? getProfileNow() : 0;
-            composeCtx.drawImage(
-                tileOutputCanvas,
-                0,
-                0,
-                targetWidth,
-                targetHeight,
-                targetX,
-                targetY,
-                targetWidth,
-                targetHeight
-            );
-            if (profiling) {
-                tileComposeMs += getProfileNow() - tileComposeStart;
-            }
-
-            tileCount++;
         }
+
+        const presentPipeline = getOrCreateWebGpuRenderPipeline(device, canvasFormat);
+        encodeWebGpuBlitPass({
+            encoder,
+            targetTextureView: canvasContext.getCurrentTexture().createView(),
+            renderPipeline: presentPipeline,
+            bindGroup: composePresentBindGroup,
+            loadOp: 'clear',
+            clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        });
+
+        device.queue.submit([encoder.finish()]);
+    } finally {
+        uploadSourceHandle.dispose?.();
     }
 
     runtimeLog('webgpu:tiled-run', {
@@ -725,14 +1223,19 @@ async function runAnime4KWebGpuTiled(tempImg, canvas, settings, device, maxTextu
     if (profiling) {
         profiling.emit('webgpu-tiled', {
             modelUsed,
+            uploadSourceType: uploadSourceHandle.sourceType,
             sourceTileWidth,
             sourceTileHeight,
             tileCount,
-            durationsMs: formatWebGpuProfileDurations({
-                total: getProfileNow() - tiledTimingStart,
-                tileExtraction: tileExtractionMs,
-                tileSingleRun: tileSingleRunMs,
-                tileCompose: tileComposeMs
+            durationsMs: buildWebGpuTiledDurationsMs({
+                tiledTimingStart,
+                tileExtractionMs,
+                tileSingleRunMs,
+                tileComposeMs,
+                tileUploadTotalMs,
+                tileUploadConfigMs,
+                tileUploadCopyCallMs,
+                tileCount
             })
         });
     }
@@ -783,14 +1286,29 @@ async function runAnime4KWebGpu(tempImg, canvas, runtimeSettings = getRuntimePre
         throw new Error(errorMessage);
     }
 
-    const singleRun = await runAnime4KWebGpuSingle(
-        tempImg,
-        canvas,
-        settings,
-        device,
-        maxTextureDimension2D
-    );
+    ensureWebGpuCanvasTargetSize(canvas, targetWidth, targetHeight);
+    const uploadSourcePrepareStart = profilingEnabled ? getProfileNow() : 0;
+    const uploadSourceHandle = await createWebGpuUploadSource(tempImg);
+    const uploadSourcePrepareMs = profilingEnabled ? (getProfileNow() - uploadSourcePrepareStart) : 0;
+
+    let singleRun;
+    try {
+        singleRun = await runAnime4KWebGpuSingle(
+            tempImg,
+            canvas,
+            settings,
+            device,
+            maxTextureDimension2D,
+            {
+                uploadSource: uploadSourceHandle.source,
+                uploadSourceType: uploadSourceHandle.sourceType
+            }
+        );
+    } finally {
+        uploadSourceHandle.dispose?.();
+    }
     if (profilingEnabled) {
+        const uploadDurations = singleRun.uploadProfile?.durationsMs || {};
         runtimeProfileLog('webgpu-upscale', {
             backend: 'webgpu',
             runMode: 'single',
@@ -801,9 +1319,13 @@ async function runAnime4KWebGpu(tempImg, canvas, runtimeSettings = getRuntimePre
             nativeHeight,
             targetWidth,
             targetHeight,
-            durationsMs: formatWebGpuProfileDurations({
-                total: getProfileNow() - upscaleStart
-            })
+            uploadSourceType: uploadSourceHandle.sourceType,
+            durationsMs: buildWebGpuUpscaleDurationsMs({
+                upscaleStart,
+                uploadSourcePrepareMs,
+                uploadDurations
+            }),
+            textureUploadDetails: singleRun.uploadProfile || null
         });
     }
     return { model: singleRun.modelUsed, runMode: 'single' };
