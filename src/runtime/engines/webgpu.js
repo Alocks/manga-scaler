@@ -259,7 +259,8 @@ function getOrCreateWebGpuProcessingPipeline({
         webgpuProcessingCache.device === device &&
         webgpuProcessingCache.key === cacheKey
     ) {
-        return { ...webgpuProcessingCache, cacheHit: true };
+        webgpuProcessingCache.cacheHit = true;
+        return webgpuProcessingCache;
     }
 
     disposeWebGpuProcessingCache();
@@ -286,7 +287,11 @@ function getOrCreateWebGpuProcessingPipeline({
             inputTexture,
             outputTexture,
             anime,
-            pipeline: null
+            pipeline: null,
+            cacheHit: false,
+            outputTextureView: null,
+            presentBindGroup: null,
+            presentBindGroupDevice: null
         };
     } else {
         const pipeline = new presetCtor({
@@ -309,11 +314,37 @@ function getOrCreateWebGpuProcessingPipeline({
             inputTexture,
             outputTexture,
             anime: null,
-            pipeline
+            pipeline,
+            cacheHit: false,
+            outputTextureView: null,
+            presentBindGroup: null,
+            presentBindGroupDevice: null
         };
     }
 
-    return { ...webgpuProcessingCache, cacheHit: false };
+    return webgpuProcessingCache;
+}
+
+function getOrCreateWebGpuPresentBindGroup(processing, device) {
+    if (
+        processing.presentBindGroup &&
+        processing.presentBindGroupDevice === device
+    ) {
+        return processing.presentBindGroup;
+    }
+
+    const shader = getWebGpuRenderResources(device);
+    processing.outputTextureView = processing.outputTexture.createView();
+    processing.presentBindGroup = device.createBindGroup({
+        layout: shader.bindGroupLayout,
+        entries: [
+            { binding: 0, resource: shader.sampler },
+            { binding: 1, resource: processing.outputTextureView }
+        ]
+    });
+    processing.presentBindGroupDevice = device;
+
+    return processing.presentBindGroup;
 }
 
 function getWebGpuRenderResources(device) {
@@ -516,14 +547,7 @@ async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, max
     const context = getOrCreateWebGpuCanvasContext(canvas, device, canvasFormat);
 
     const renderPipeline = getOrCreateWebGpuRenderPipeline(device, canvasFormat);
-    const shader = getWebGpuRenderResources(device);
-    const bindGroup = device.createBindGroup({
-        layout: shader.bindGroupLayout,
-        entries: [
-            { binding: 0, resource: shader.sampler },
-            { binding: 1, resource: outputTexture.createView() }
-        ]
-    });
+    const bindGroup = getOrCreateWebGpuPresentBindGroup(processing, device);
 
     const pass = encoder.beginRenderPass({
         colorAttachments: [{
@@ -548,26 +572,22 @@ async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, max
         timings.submitAt = getProfileNow();
     }
 
-    if (WEBGPU_WAIT_FOR_SUBMISSION) {
-        await device.queue.onSubmittedWorkDone();
-    }
-
     if (profiling?.enabled) {
-        await device.queue.onSubmittedWorkDone();
         const submittedWorkDoneAt = getProfileNow();
         profiling.emit('webgpu-single', {
             modelUsed,
             cacheHit: !!processing.cacheHit,
             processingKind: processing.kind,
             durationsMs: formatWebGpuProfileDurations({
-                total: submittedWorkDoneAt - timings.totalStart,
+                total: timings.submitAt - timings.totalStart,
                 pipelineSetup: timings.pipelineReadyAt - timings.totalStart,
                 textureUpload: timings.copyCompleteAt - timings.pipelineReadyAt,
                 processEncode: timings.processPassEncodedAt - timings.copyCompleteAt,
                 presentEncode: timings.renderPassEncodedAt - timings.processPassEncodedAt,
-                submit: timings.submitAt - timings.renderPassEncodedAt,
-                gpuExecution: submittedWorkDoneAt - timings.submitAt
-            })
+                submit: timings.submitAt - timings.renderPassEncodedAt
+            }),
+            gpuExecutionOmitted: true,
+            profileTimestamp: roundProfileDuration(submittedWorkDoneAt)
         });
     }
 
@@ -752,24 +772,15 @@ async function runAnime4KWebGpu(tempImg, canvas, runtimeSettings = getRuntimePre
         targetWidth > maxTextureDimension2D ||
         targetHeight > maxTextureDimension2D
     ) {
-        const tiledModel = await runAnime4KWebGpuTiled(tempImg, canvas, settings, device, maxTextureDimension2D);
-        if (profilingEnabled) {
-            runtimeProfileLog('webgpu-upscale', {
-                backend: 'webgpu',
-                runMode: 'tiled',
-                model: tiledModel,
-                requestedModel: settings.selectedWebGpuModel,
-                scale: settings.selectedWebGpuScale,
-                nativeWidth,
-                nativeHeight,
-                targetWidth,
-                targetHeight,
-                durationsMs: formatWebGpuProfileDurations({
-                    total: getProfileNow() - upscaleStart
-                })
-            });
-        }
-        return { model: tiledModel, runMode: 'tiled' };
+        const errorMessage = `WebGPU single-pass limits exceeded and tiled fallback is disabled for performance: input=${nativeWidth}x${nativeHeight}, target=${targetWidth}x${targetHeight}, max=${maxTextureDimension2D}`;
+        runtimeLog('webgpu:tiled-disabled-fallback', {
+            nativeWidth,
+            nativeHeight,
+            targetWidth,
+            targetHeight,
+            maxTextureDimension2D
+        });
+        throw new Error(errorMessage);
     }
 
     const singleRun = await runAnime4KWebGpuSingle(
