@@ -1,7 +1,7 @@
 // Bootstrap entrypoint: logger setup and CSS injection
 
 const DEBUG = false;
-const ENABLE_WEBGPU_PROFILING = true;
+const ENABLE_WEBGPU_PROFILING = false;
 const ALWAYS_LOG_LABELS = new Set([
     'bg-process:skip-cached',
     'bg-process:upscale-time',

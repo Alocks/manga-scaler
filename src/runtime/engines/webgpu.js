@@ -1,4 +1,4 @@
-// WebGPU adapter using anime4k-webgpu library
+// WebGPU backend orchestration; model factories live under runtime/factories/ai-models.
 
 let webgpuDevicePromise = null;
 let webgpuRenderPipeline = null;
@@ -18,47 +18,6 @@ const webgpuPreparedImageBitmapCache = new Map();
 let webgpuTiledComposeCache = null;
 let webgpuTiledInputScratchCache = null;
 const WEBGPU_TILE_INPUT_SCRATCH_SIZE = 1024;
-const WEBGPU_MODEL_CTOR_NAMES = ['Anime4K', 'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'];
-
-function getWebGpuLibrary() {
-    const lib = window['anime4k-webgpu'];
-    return lib && typeof lib === 'object' ? lib : null;
-}
-
-function isWebGpuLibrarySupported(lib) {
-    if (typeof engineLibraryHasAnyFunctions === 'function') {
-        return engineLibraryHasAnyFunctions(lib, WEBGPU_MODEL_CTOR_NAMES);
-    }
-    return WEBGPU_MODEL_CTOR_NAMES.some((name) => typeof lib?.[name] === 'function');
-}
-
-function getWebGpuPresetCtor(lib, runtimeSettings = getRuntimePreferenceSnapshot()) {
-    const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
-    const explicitCtor = lib[settings.selectedWebGpuModel];
-    if (typeof explicitCtor === 'function') {
-        return explicitCtor;
-    }
-
-    const presetByLevel = {
-        S: [lib.ModeC, lib.ModeB, lib.ModeA],
-        M: [lib.ModeB, lib.ModeA, lib.ModeC],
-        L: [lib.ModeA, lib.ModeAA, lib.ModeB],
-        VL: [lib.ModeAA, lib.ModeA, lib.ModeCA],
-        UL: [lib.ModeCA, lib.ModeAA, lib.ModeA]
-    };
-
-    const ordered = presetByLevel[settings.selectedSimplePreset] || [lib.ModeA, lib.ModeB, lib.ModeC];
-    for (const ctor of ordered) {
-        if (typeof ctor === 'function') return ctor;
-    }
-
-    const fallback = [lib.ModeA, lib.ModeAA, lib.ModeB, lib.ModeBB, lib.ModeC, lib.ModeCA];
-    for (const ctor of fallback) {
-        if (typeof ctor === 'function') return ctor;
-    }
-
-    return null;
-}
 
 async function getWebGpuDevice() {
     if (webgpuDevicePromise) return webgpuDevicePromise;
@@ -120,11 +79,6 @@ async function getWebGpuDevice() {
     }
 }
 
-function getWebGpuLibraryForAdapter() {
-    if (!navigator?.gpu) return null;
-    return getWebGpuLibrary();
-}
-
 function resetWebGpuAdapterState() {
     webgpuDevicePromise = null;
     webgpuRenderPipeline = null;
@@ -164,19 +118,7 @@ function disposeWebGpuProcessingEntry(entry) {
     if (!entry) return;
 
     try {
-        entry.anime?.destroy?.();
-    } catch {}
-
-    try {
-        entry.anime?.dispose?.();
-    } catch {}
-
-    try {
-        entry.pipeline?.destroy?.();
-    } catch {}
-
-    try {
-        entry.pipeline?.dispose?.();
+        entry.disposeProcessing?.();
     } catch {}
 
     if (entry.ownsInputTexture !== false) {
@@ -453,14 +395,13 @@ function encodeWebGpuBlitPass({
 function encodeWebGpuProcessingPass(processing, encoder) {
     const outputTexture = processing.outputTexture;
 
-    if (processing.kind === 'anime4k') {
-        processing.anime.render(outputTexture, encoder);
-    } else {
-        processing.pipeline.pass(encoder);
+    if (typeof processing.runProcessingPass !== 'function') {
+        throw new Error(`WebGPU processing entry is missing run callback for provider ${processing.providerName || 'unknown'}`);
     }
+    processing.runProcessingPass(encoder);
 
     if (!outputTexture) {
-        throw new Error('anime4k-webgpu did not produce an output texture');
+        throw new Error(`WebGPU model provider ${processing.providerName || 'unknown'} did not produce an output texture`);
     }
 
     return outputTexture;
@@ -642,14 +583,13 @@ function createWebGpuProfileCollector(enabled, baseFields = {}) {
     };
 }
 
-function createWebGpuProcessingCacheKey({ kind, modelName, nativeWidth, nativeHeight, targetWidth, targetHeight }) {
-    return `${kind}|${modelName}|${nativeWidth}x${nativeHeight}|${targetWidth}x${targetHeight}`;
+function createWebGpuProcessingCacheKey({ providerName, kind, modelName, nativeWidth, nativeHeight, targetWidth, targetHeight }) {
+    return `${providerName}|${kind}|${modelName}|${nativeWidth}x${nativeHeight}|${targetWidth}x${targetHeight}`;
 }
 
 function getOrCreateWebGpuProcessingPipeline({
-    lib,
+    processingFactory,
     device,
-    settings,
     nativeWidth,
     nativeHeight,
     targetWidth,
@@ -657,16 +597,14 @@ function getOrCreateWebGpuProcessingPipeline({
     inputTextureOverride = null,
     inputTextureOverrideKey = ''
 }) {
-    const presetCtor = typeof lib.Anime4K === 'function' ? null : getWebGpuPresetCtor(lib, settings);
-    if (!lib.Anime4K && !presetCtor) {
-        throw new Error('No compatible anime4k-webgpu preset class is exported');
+    if (!processingFactory || typeof processingFactory.createResources !== 'function') {
+        throw new Error('WebGPU processing factory is not configured correctly');
     }
 
-    const kind = typeof lib.Anime4K === 'function' ? 'anime4k' : 'preset';
-    const modelName = kind === 'anime4k'
-        ? 'Anime4K'
-        : (presetCtor.name || settings.selectedWebGpuModel);
+    const kind = processingFactory.kind || 'unknown';
+    const modelName = processingFactory.modelName || 'default';
     const cacheKey = createWebGpuProcessingCacheKey({
+        providerName: processingFactory.providerName || 'provider',
         kind,
         modelName,
         nativeWidth,
@@ -691,62 +629,36 @@ function getOrCreateWebGpuProcessingPipeline({
     });
     const ownsInputTexture = !inputTextureOverride;
 
-    if (kind === 'anime4k') {
-        const outputTexture = device.createTexture({
-            size: [targetWidth, targetHeight, 1],
-            format: 'rgba16float',
-            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.STORAGE_BINDING
-        });
-
-        const anime = new lib.Anime4K(device, inputTexture);
-        const entry = {
-            key: cacheKey,
-            device,
-            kind,
-            modelUsed: modelName,
-            inputTexture,
-            ownsInputTexture,
-            outputTexture,
-            anime,
-            pipeline: null,
-            cacheHit: false,
-            outputTextureView: null,
-            presentBindGroup: null,
-            presentBindGroupDevice: null,
-            lastUsedTick: 0
-        };
-        return setWebGpuProcessingCacheEntry(cacheKey, entry);
-    } else {
-        const pipeline = new presetCtor({
-            device,
-            inputTexture,
-            nativeDimensions: { width: nativeWidth, height: nativeHeight },
-            targetDimensions: { width: targetWidth, height: targetHeight }
-        });
-
-        if (typeof pipeline.pass !== 'function' || typeof pipeline.getOutputTexture !== 'function') {
-            throw new Error('Invalid anime4k-webgpu pipeline interface');
-        }
-
-        const outputTexture = pipeline.getOutputTexture();
-        const entry = {
-            key: cacheKey,
-            device,
-            kind,
-            modelUsed: modelName,
-            inputTexture,
-            ownsInputTexture,
-            outputTexture,
-            anime: null,
-            pipeline,
-            cacheHit: false,
-            outputTextureView: null,
-            presentBindGroup: null,
-            presentBindGroupDevice: null,
-            lastUsedTick: 0
-        };
-        return setWebGpuProcessingCacheEntry(cacheKey, entry);
+    const created = processingFactory.createResources({
+        device,
+        inputTexture,
+        nativeWidth,
+        nativeHeight,
+        targetWidth,
+        targetHeight
+    });
+    if (!created || typeof created.runPass !== 'function' || !created.outputTexture) {
+        throw new Error(`WebGPU model provider ${processingFactory.providerName || 'unknown'} returned an invalid processing pipeline`);
     }
+
+    const entry = {
+        key: cacheKey,
+        device,
+        providerName: processingFactory.providerName,
+        kind,
+        modelUsed: created.modelUsed || modelName,
+        inputTexture,
+        ownsInputTexture,
+        outputTexture: created.outputTexture,
+        runProcessingPass: created.runPass,
+        disposeProcessing: created.dispose,
+        cacheHit: false,
+        outputTextureView: null,
+        presentBindGroup: null,
+        presentBindGroupDevice: null,
+        lastUsedTick: 0
+    };
+    return setWebGpuProcessingCacheEntry(cacheKey, entry);
 }
 
 function getOrCreateWebGpuPresentBindGroup(processing, device) {
@@ -943,15 +855,15 @@ async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, max
         );
     }
 
-    const lib = getWebGpuLibrary();
+    const lib = getAnime4kWebGpuLibrary();
     if (!lib) {
         throw new Error('anime4k-webgpu runtime is not loaded on window');
     }
+    const processingFactory = getAnime4kWebGpuProcessingFactory(lib, settings);
 
     const processing = getOrCreateWebGpuProcessingPipeline({
-        lib,
+        processingFactory,
         device,
-        settings,
         nativeWidth,
         nativeHeight,
         targetWidth,
@@ -1026,6 +938,7 @@ async function runAnime4KWebGpuSingle(sourceImage, canvas, settings, device, max
         profiling.emit('webgpu-single', {
             modelUsed,
             cacheHit: !!processing.cacheHit,
+            provider: processing.providerName,
             processingKind: processing.kind,
             durationsMs: buildWebGpuSingleDurationsMs(timings),
             textureUploadDetails,
@@ -1079,10 +992,11 @@ async function runAnime4KWebGpuTiled(tempImg, canvas, settings, device, maxTextu
         throw new Error(`WebGPU tiled output canvas rejected size: ${finalTargetWidth}x${finalTargetHeight}`);
     }
 
-    const lib = getWebGpuLibrary();
+    const lib = getAnime4kWebGpuLibrary();
     if (!lib) {
         throw new Error('anime4k-webgpu runtime is not loaded on window');
     }
+    const processingFactory = getAnime4kWebGpuProcessingFactory(lib, settings);
 
     const canvasFormat = getWebGpuPreferredCanvasFormat();
     const canvasContext = getOrCreateWebGpuCanvasContext(canvas, device, canvasFormat);
@@ -1140,9 +1054,8 @@ async function runAnime4KWebGpuTiled(tempImg, canvas, settings, device, maxTextu
 
                 const tileSingleRunStart = profiling ? getProfileNow() : 0;
                 const processing = getOrCreateWebGpuProcessingPipeline({
-                    lib,
+                    processingFactory,
                     device,
-                    settings,
                     nativeWidth: tileSourceWidth,
                     nativeHeight: tileSourceHeight,
                     targetWidth: tileTargetWidth,
@@ -1223,6 +1136,7 @@ async function runAnime4KWebGpuTiled(tempImg, canvas, settings, device, maxTextu
     if (profiling) {
         profiling.emit('webgpu-tiled', {
             modelUsed,
+            provider: processingFactory.providerName,
             uploadSourceType: uploadSourceHandle.sourceType,
             sourceTileWidth,
             sourceTileHeight,
@@ -1247,7 +1161,7 @@ async function runAnime4KWebGpu(tempImg, canvas, runtimeSettings = getRuntimePre
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
     const profilingEnabled = isRuntimeProfilingEnabled();
     const upscaleStart = profilingEnabled ? getProfileNow() : 0;
-    const lib = getWebGpuLibrary();
+    const lib = getAnime4kWebGpuLibrary();
     if (!lib) {
         throw new Error('anime4k-webgpu runtime is not loaded on window');
     }
@@ -1336,8 +1250,8 @@ async function prewarmWebGpu() {
 }
 
 window.WebGPUAdapter = createLibraryBackedEngineAdapter({
-    getLibrary: getWebGpuLibraryForAdapter,
-    isLibrarySupported: isWebGpuLibrarySupported,
+    getLibrary: getAnime4kWebGpuLibraryForAdapter,
+    isLibrarySupported: isAnime4kWebGpuLibrarySupported,
     upscale: runAnime4KWebGpu,
     ensureReady: prewarmWebGpu,
     resetState: resetWebGpuAdapterState,

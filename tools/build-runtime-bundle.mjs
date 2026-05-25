@@ -20,6 +20,11 @@ const sourceAdapterFiles = [
   'src/runtime/sources/mangakakalot_manganato.js'
 ];
 
+const runtimeModelFactoryFiles = [
+  'src/runtime/factories/ai-models/ai_model_factory.js',
+  'src/runtime/factories/ai-models/anime4k_webgpu.js'
+];
+
 const engineAdapterFiles = [
   'src/runtime/engines/base_engine.js',
   'src/runtime/engines/webgl.js',
@@ -36,6 +41,7 @@ const runtimePipelineFiles = [
 const runtimeSourceFiles = [
   ...runtimeCoreFiles,
   ...sourceAdapterFiles,
+  ...runtimeModelFactoryFiles,
   ...engineAdapterFiles,
   ...runtimePipelineFiles
 ];
