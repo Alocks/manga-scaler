@@ -12,11 +12,18 @@ Currently works for the following websites:
 - Mangakakalot
 - Manganato
 
-Available engines and profiles:
-- **WebGL** Low performance
-- **WebGPU** High performance *(compatibility may vary on browser)*
-<img width="538" height="492" alt="image" src="https://github.com/user-attachments/assets/97ebdce9-cfdd-4ff4-b412-cb531f4d481e" />
+Available engines and profiles (Refactor in progress. I may remove WebGPU and WebGL entirely if my onnxruntime implementation works better using Anime4K model using ONNX):
+- **WebGL** Low performance [Uses Anime4k model]
+- **WebGPU** High performance [Uses Anime4k model] *(compatibility may vary on browser)*
+- **ONNX** GPU Heavy, but best option. [Uses few models. Still implementing]
+<img width="844" height="590" alt="image" src="https://github.com/user-attachments/assets/71ff345a-34bf-4c8c-a469-c39de40cab01" />
 
+## Models available for ONNX
+- RealESR General x4 v3
+- RealESRGAN 2x+
+- RealCUGAN Conservative
+- RealCUGAN 2X Latest Denoise 1x
+- More SoonTM
 
 ## Before
 <img width="532" height="398" alt="image" src="https://github.com/user-attachments/assets/0700422a-7543-42e0-927c-d1cf2b4c460b" />
