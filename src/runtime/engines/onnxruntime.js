@@ -17,7 +17,7 @@ let onnxWorkingCanvasPool = {
     [ONNX_WORKER_LANE_BACKGROUND]: Object.create(null)
 };
 const ONNX_WORKER_PENDING_WARNING_MS = 5000;
-const ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS = 1;
+const ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS = 4;
 
 function createOnnxWorkerLaneState() {
     return {

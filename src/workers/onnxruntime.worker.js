@@ -4,10 +4,13 @@ let workerInitPromise = null;
 let workerProvider = null;
 let workerRunCounter = 0;
 let workerRunQueueDepth = 0;
-let workerRunSerial = Promise.resolve();
+let workerRunDrainPromise = null;
+let workerRunDrainScheduled = false;
+const workerPendingRuns = [];
 let workerCanUseTensorFromImage = null;
 const WORKER_RUN_WARNING_MS = 5000;
-const WORKER_MAX_BUFFERED_RUNS = 1;
+const WORKER_MAX_BUFFERED_RUNS = 8;
+const WORKER_DYNAMIC_BATCH_SIZE = 2;
 const WORKER_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
 
 function getWorkerNow() {
@@ -126,23 +129,50 @@ async function imageBufferToTensor(rgbaBuffer, width, height) {
         }
     }
 
-    const rgba = new Uint8Array(rgbaBuffer);
     const pixelCount = width * height;
     const chw = new Float32Array(pixelCount * 3);
-    const gBase = pixelCount;
-    const bBase = pixelCount * 2;
-
-    for (let i = 0; i < pixelCount; i++) {
-        const srcOffset = i << 2;
-        chw[i] = rgba[srcOffset] * WORKER_BYTE_TO_UNIT_FLOAT;
-        chw[gBase + i] = rgba[srcOffset + 1] * WORKER_BYTE_TO_UNIT_FLOAT;
-        chw[bBase + i] = rgba[srcOffset + 2] * WORKER_BYTE_TO_UNIT_FLOAT;
-    }
+    writeImageBufferToChw(rgbaBuffer, width, height, chw, 0);
 
     return new workerOrt.Tensor('float32', chw, [1, 3, height, width]);
 }
 
-function tensorToImageBuffer(outputTensor) {
+function writeImageBufferToChw(rgbaBuffer, width, height, targetChw, targetOffset = 0) {
+    if (!(rgbaBuffer instanceof ArrayBuffer)) {
+        throw new Error('ONNX worker received an invalid input pixel buffer');
+    }
+
+    const rgba = new Uint8Array(rgbaBuffer);
+    const pixelCount = width * height;
+    const gBase = targetOffset + pixelCount;
+    const bBase = targetOffset + pixelCount * 2;
+
+    for (let i = 0; i < pixelCount; i++) {
+        const srcOffset = i << 2;
+        targetChw[targetOffset + i] = rgba[srcOffset] * WORKER_BYTE_TO_UNIT_FLOAT;
+        targetChw[gBase + i] = rgba[srcOffset + 1] * WORKER_BYTE_TO_UNIT_FLOAT;
+        targetChw[bBase + i] = rgba[srcOffset + 2] * WORKER_BYTE_TO_UNIT_FLOAT;
+    }
+}
+
+function imageBufferBatchToTensor(batchPayloads, width, height) {
+    const batchSize = batchPayloads.length;
+    if (!Number.isFinite(batchSize) || batchSize < 1) {
+        throw new Error('ONNX worker received an invalid batch payload');
+    }
+
+    const pixelCount = width * height;
+    const channels = 3;
+    const perImageStride = channels * pixelCount;
+    const chw = new Float32Array(batchSize * perImageStride);
+
+    for (let i = 0; i < batchSize; i++) {
+        writeImageBufferToChw(batchPayloads[i].rgbaBuffer, width, height, chw, i * perImageStride);
+    }
+
+    return new workerOrt.Tensor('float32', chw, [batchSize, channels, height, width]);
+}
+
+function tensorToImageBuffer(outputTensor, batchIndex = 0) {
     if (!outputTensor || !Array.isArray(outputTensor.dims) || outputTensor.dims.length !== 4) {
         throw new Error('Unexpected worker ONNX output tensor shape. Expected rank-4 [N,C,H,W]');
     }
@@ -152,7 +182,11 @@ function tensorToImageBuffer(outputTensor) {
         throw new Error(`Invalid worker ONNX output dims: ${JSON.stringify(outputTensor.dims)}`);
     }
 
-    if (typeof outputTensor?.toImageData === 'function') {
+    if (!Number.isFinite(batchIndex) || batchIndex < 0 || batchIndex >= batch) {
+        throw new Error(`Invalid worker ONNX output batch index: ${batchIndex} for batch size ${batch}`);
+    }
+
+    if (batch === 1 && batchIndex === 0 && typeof outputTensor?.toImageData === 'function') {
         try {
             const imageData = outputTensor.toImageData({
                 tensorLayout: 'NCHW',
@@ -183,9 +217,9 @@ function tensorToImageBuffer(outputTensor) {
     }
 
     const pixelCount = outWidth * outHeight;
+    const perBatchStride = channels * pixelCount;
     const channelStride = pixelCount;
-    const batchStride = channels * channelStride;
-    const base = 0 * batchStride;
+    const base = batchIndex * perBatchStride;
     const rgba = new Uint8ClampedArray(pixelCount * 4);
     const valueScale = inferWorkerOutputScale(data);
 
@@ -200,9 +234,180 @@ function tensorToImageBuffer(outputTensor) {
     return {
         outputWidth: outWidth,
         outputHeight: outHeight,
-        outputDims: outputTensor.dims,
+        outputDims: [1, channels, outHeight, outWidth],
         rgbaBuffer: rgba.buffer
     };
+}
+
+function scheduleWorkerRunDrain() {
+    if (workerRunDrainScheduled) {
+        return;
+    }
+
+    workerRunDrainScheduled = true;
+    Promise.resolve().then(() => {
+        workerRunDrainScheduled = false;
+        if (!workerRunDrainPromise) {
+            workerRunDrainPromise = drainWorkerRunQueue().finally(() => {
+                workerRunDrainPromise = null;
+                if (workerPendingRuns.length > 0) {
+                    scheduleWorkerRunDrain();
+                }
+            });
+        }
+    });
+}
+
+function takeNextWorkerBatch() {
+    if (workerPendingRuns.length === 0) {
+        return [];
+    }
+
+    const batch = [workerPendingRuns.shift()];
+    const headPayload = batch[0].payload;
+
+    for (let i = 0; i < workerPendingRuns.length && batch.length < WORKER_DYNAMIC_BATCH_SIZE; ) {
+        const candidate = workerPendingRuns[i];
+        if (candidate.payload.width === headPayload.width && candidate.payload.height === headPayload.height) {
+            batch.push(candidate);
+            workerPendingRuns.splice(i, 1);
+            continue;
+        }
+        i += 1;
+    }
+
+    return batch;
+}
+
+async function runWorkerInferenceBatch(batchEntries) {
+    if (!Array.isArray(batchEntries) || batchEntries.length === 0) {
+        return;
+    }
+
+    const headPayload = batchEntries[0].payload;
+    const runId = batchEntries[0].runId;
+    const batchSize = batchEntries.length;
+    const runStartedAt = getWorkerNow();
+    const session = await ensureWorkerSession(headPayload.init);
+    const width = headPayload.width;
+    const height = headPayload.height;
+    const inputName = session.inputNames?.[0];
+
+    postWorkerLog('onnx:worker-run-start', {
+        runId,
+        batchSize,
+        width,
+        height,
+        pixelCount: width * height,
+        queueDepth: workerRunQueueDepth
+    });
+
+    if (!inputName) {
+        throw new Error('Worker ONNX model has no input name');
+    }
+
+    const tensorStartAt = getWorkerNow();
+    const inputTensor = batchSize > 1
+        ? imageBufferBatchToTensor(batchEntries.map((entry) => entry.payload), width, height)
+        : await imageBufferToTensor(headPayload.rgbaBuffer, width, height);
+    const tensorEndAt = getWorkerNow();
+
+    postWorkerLog('onnx:worker-pass-inference-start', {
+        runId,
+        batchSize,
+        inputName,
+        inputDims: inputTensor.dims,
+        tensorBuildMs: formatWorkerDurationMs(tensorStartAt, tensorEndAt)
+    });
+
+    const runWarningTimer = self.setTimeout(() => {
+        postWorkerLog('onnx:worker-pass-still-running', {
+            runId,
+            batchSize,
+            inputName,
+            inputDims: inputTensor.dims,
+            elapsedMs: formatWorkerDurationMs(runStartedAt)
+        });
+    }, WORKER_RUN_WARNING_MS);
+
+    const inferenceStartAt = getWorkerNow();
+    let outputs;
+    try {
+        outputs = await session.run({ [inputName]: inputTensor });
+    } finally {
+        self.clearTimeout(runWarningTimer);
+    }
+    const inferenceEndAt = getWorkerNow();
+
+    postWorkerLog('onnx:worker-pass-inference-complete', {
+        runId,
+        batchSize,
+        inputName,
+        inferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt)
+    });
+
+    const outputResolveStartAt = getWorkerNow();
+    const outputTensor = resolveWorkerOutputTensor(outputs, session.outputNames || []);
+    const outputResolveEndAt = getWorkerNow();
+
+    postWorkerLog('onnx:worker-output-resolved', {
+        runId,
+        batchSize,
+        outputDims: outputTensor?.dims || null,
+        resolveMs: formatWorkerDurationMs(outputResolveStartAt, outputResolveEndAt)
+    });
+
+    const outputBatchSize = Array.isArray(outputTensor?.dims) ? Number(outputTensor.dims[0]) : 0;
+    if (!Number.isFinite(outputBatchSize) || outputBatchSize < batchSize) {
+        throw new Error(`Worker ONNX output batch size mismatch. Expected at least ${batchSize}, received ${outputBatchSize}`);
+    }
+
+    for (let i = 0; i < batchEntries.length; i++) {
+        const outputImage = tensorToImageBuffer(outputTensor, i);
+        batchEntries[i].resolve({
+            inputName,
+            inputDims: [1, 3, height, width],
+            outputDims: outputImage.outputDims,
+            outputWidth: outputImage.outputWidth,
+            outputHeight: outputImage.outputHeight,
+            rgbaBuffer: outputImage.rgbaBuffer,
+            provider: workerProvider
+        });
+    }
+
+    postWorkerLog('onnx:worker-pass-success', {
+        runId,
+        batchSize,
+        inputName,
+        inputDims: inputTensor.dims,
+        outputDims: outputTensor?.dims || null,
+        inferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt),
+        totalRunMs: formatWorkerDurationMs(runStartedAt)
+    });
+}
+
+async function drainWorkerRunQueue() {
+    while (workerPendingRuns.length > 0) {
+        const batchEntries = takeNextWorkerBatch();
+        if (batchEntries.length === 0) {
+            return;
+        }
+
+        try {
+            await runWorkerInferenceBatch(batchEntries);
+        } catch (error) {
+            for (const entry of batchEntries) {
+                entry.reject(error);
+            }
+        } finally {
+            workerRunQueueDepth = Math.max(0, workerRunQueueDepth - batchEntries.length);
+            postWorkerLog('onnx:worker-run-finished', {
+                runId: batchEntries[0]?.runId || null,
+                batchSize: batchEntries.length,
+                remainingQueueDepth: workerRunQueueDepth
+            });
+        }
+    }
 }
 
 async function ensureWorkerSession(payload) {
@@ -264,124 +469,29 @@ async function ensureWorkerSession(payload) {
 }
 
 async function runWorkerInference(payload) {
-    const runId = ++workerRunCounter;
-    const queueDepthAfterEnqueue = ++workerRunQueueDepth;
+    return new Promise((resolve, reject) => {
+        const runId = ++workerRunCounter;
+        const queueDepthAfterEnqueue = workerRunQueueDepth + 1;
 
-    postWorkerLog('onnx:worker-run-queued', {
-        runId,
-        width: payload.width,
-        height: payload.height,
-        pixelCount: payload.width * payload.height,
-        queueDepth: queueDepthAfterEnqueue
+        workerPendingRuns.push({
+            runId,
+            payload,
+            resolve,
+            reject
+        });
+        workerRunQueueDepth = queueDepthAfterEnqueue;
+
+        postWorkerLog('onnx:worker-run-queued', {
+            runId,
+            width: payload.width,
+            height: payload.height,
+            pixelCount: payload.width * payload.height,
+            queueDepth: queueDepthAfterEnqueue,
+            maxBatchSize: WORKER_DYNAMIC_BATCH_SIZE
+        });
+
+        scheduleWorkerRunDrain();
     });
-
-    const scheduledRun = workerRunSerial.then(async () => {
-        const runStartedAt = getWorkerNow();
-        const session = await ensureWorkerSession(payload.init);
-        const width = payload.width;
-        const height = payload.height;
-        const inputName = session.inputNames?.[0];
-
-        postWorkerLog('onnx:worker-run-start', {
-            runId,
-            width,
-            height,
-            pixelCount: width * height,
-            queueDepth: workerRunQueueDepth
-        });
-
-        if (!inputName) {
-            throw new Error('Worker ONNX model has no input name');
-        }
-
-        const tensorStartAt = getWorkerNow();
-        const inputTensor = await imageBufferToTensor(payload.rgbaBuffer, width, height);
-        const tensorEndAt = getWorkerNow();
-
-        postWorkerLog('onnx:worker-pass-inference-start', {
-            runId,
-            inputName,
-            inputDims: inputTensor.dims,
-            tensorBuildMs: formatWorkerDurationMs(tensorStartAt, tensorEndAt)
-        });
-
-        const runWarningTimer = self.setTimeout(() => {
-            postWorkerLog('onnx:worker-pass-still-running', {
-                runId,
-                inputName,
-                inputDims: inputTensor.dims,
-                elapsedMs: formatWorkerDurationMs(runStartedAt)
-            });
-        }, WORKER_RUN_WARNING_MS);
-
-        const inferenceStartAt = getWorkerNow();
-        let outputs;
-        try {
-            outputs = await session.run({ [inputName]: inputTensor });
-        } finally {
-            self.clearTimeout(runWarningTimer);
-        }
-        const inferenceEndAt = getWorkerNow();
-
-        postWorkerLog('onnx:worker-pass-inference-complete', {
-            runId,
-            inputName,
-            inferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt)
-        });
-
-        const outputResolveStartAt = getWorkerNow();
-        const outputTensor = resolveWorkerOutputTensor(outputs, session.outputNames || []);
-        const outputResolveEndAt = getWorkerNow();
-
-        postWorkerLog('onnx:worker-output-resolved', {
-            runId,
-            outputDims: outputTensor?.dims || null,
-            resolveMs: formatWorkerDurationMs(outputResolveStartAt, outputResolveEndAt)
-        });
-
-        const outputImageStartAt = getWorkerNow();
-        const outputImage = tensorToImageBuffer(outputTensor);
-        const outputImageEndAt = getWorkerNow();
-
-        postWorkerLog('onnx:worker-output-buffer-ready', {
-            runId,
-            outputDims: outputImage.outputDims,
-            outputWidth: outputImage.outputWidth,
-            outputHeight: outputImage.outputHeight,
-            outputBufferMs: formatWorkerDurationMs(outputImageStartAt, outputImageEndAt)
-        });
-
-        postWorkerLog('onnx:worker-pass-success', {
-            runId,
-            inputName,
-            inputDims: inputTensor.dims,
-            outputDims: outputImage.outputDims,
-            inferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt),
-            totalRunMs: formatWorkerDurationMs(runStartedAt)
-        });
-
-        return {
-            inputName,
-            inputDims: inputTensor.dims,
-            outputDims: outputImage.outputDims,
-            outputWidth: outputImage.outputWidth,
-            outputHeight: outputImage.outputHeight,
-            rgbaBuffer: outputImage.rgbaBuffer,
-            provider: workerProvider
-        };
-    });
-
-    workerRunSerial = scheduledRun.catch(() => {});
-
-    try {
-        return await scheduledRun;
-    } finally {
-        workerRunQueueDepth = Math.max(0, workerRunQueueDepth - 1);
-        postWorkerLog('onnx:worker-run-finished', {
-            runId,
-            remainingQueueDepth: workerRunQueueDepth
-        });
-    }
 }
 
 self.onmessage = async (event) => {
