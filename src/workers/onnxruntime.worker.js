@@ -441,12 +441,15 @@ async function ensureWorkerSession(payload) {
 
         const sessionOptions = {
             executionProviders: ['webgpu'],
-            graphOptimizationLevel: 'all',
-            externalData: payload.externalDataPathAliases.map((path) => ({
+            graphOptimizationLevel: 'all'
+        };
+
+        if (payload.externalDataBytes && Array.isArray(payload.externalDataPathAliases) && payload.externalDataPathAliases.length > 0) {
+            sessionOptions.externalData = payload.externalDataPathAliases.map((path) => ({
                 path,
                 data: new Uint8Array(payload.externalDataBytes)
-            }))
-        };
+            }));
+        }
 
         workerSession = await lib.InferenceSession.create(new Uint8Array(payload.modelBytes), sessionOptions);
         workerProvider = 'webgpu-worker';

@@ -64,7 +64,7 @@ function getProcessedCacheSignature(runtimeSettings = getRuntimePreferenceSnapsh
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
     const backend = getEffectiveBackend(settings);
     if (backend === 'off') return 'off';
-    return `${backend}|${settings.selectedSimplePreset}|${settings.selectedWebGpuModel}|${settings.selectedWebGpuScale}`;
+    return `${backend}|${settings.selectedSimplePreset}|${settings.selectedWebGpuModel}|${settings.selectedWebGpuScale}|${settings.selectedOnnxModel}`;
 }
 
 function getProcessedCacheKey(url, runtimeSettings = getRuntimePreferenceSnapshot()) {

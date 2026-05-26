@@ -1,0 +1,2769 @@
+
+pytorch
+2.12.0+cpu:∞¨
+ç
+inputval_0node_Shape_0"Shape*
+start†*
+
+end†JÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_58: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_58 : [num_users=4] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 2), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_58']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+á
+val_0sym_size_int_58node_sym_size_int_58"SqueezeJÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_58: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_58 : [num_users=4] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 2), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_58']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ç
+inputval_1node_Shape_1"Shape*
+start†*
+
+end†JÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_59: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_59 : [num_users=4] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 3), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_59']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+á
+val_1sym_size_int_59node_sym_size_int_59"SqueezeJÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_59: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_59 : [num_users=4] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 3), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_59']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+¯
+val_2
+sym_size_int_59add_574node_add_574"AddJÇ
+	namespaceu_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/add_574: <built-in function add>Jj
+pkg.torch.onnx.class_hierarchyH['_empty_nn_module_stack_from_metadata_hook', '<built-in function add>']JÉ
+pkg.torch.onnx.fx_nodei%add_574 : [num_users=1] = call_function[target=operator.add](args = (-1, %sym_size_int_59), kwargs = {})JV
+pkg.torch.onnx.name_scopes8['_empty_nn_module_stack_from_metadata_hook', 'add_574']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+Ö
+add_574
+val_3
+floordiv_2node_floordiv_2"DivJä
+	namespace}_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_2: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']JÇ
+pkg.torch.onnx.fx_nodeh%floordiv_2 : [num_users=2] = call_function[target=operator.floordiv](args = (%add_574, 2), kwargs = {})JY
+pkg.torch.onnx.name_scopes;['_empty_nn_module_stack_from_metadata_hook', 'floordiv_2']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+¯
+val_2
+sym_size_int_58add_576node_add_576"AddJÇ
+	namespaceu_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/add_576: <built-in function add>Jj
+pkg.torch.onnx.class_hierarchyH['_empty_nn_module_stack_from_metadata_hook', '<built-in function add>']JÉ
+pkg.torch.onnx.fx_nodei%add_576 : [num_users=1] = call_function[target=operator.add](args = (-1, %sym_size_int_58), kwargs = {})JV
+pkg.torch.onnx.name_scopes8['_empty_nn_module_stack_from_metadata_hook', 'add_576']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+Ö
+add_576
+val_3
+floordiv_3node_floordiv_3"DivJä
+	namespace}_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_3: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']JÇ
+pkg.torch.onnx.fx_nodeh%floordiv_3 : [num_users=2] = call_function[target=operator.floordiv](args = (%add_576, 2), kwargs = {})JY
+pkg.torch.onnx.name_scopes;['_empty_nn_module_stack_from_metadata_hook', 'floordiv_3']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+Ò
+val_3
+
+floordiv_2mul_1599node_mul_1599"MulJÉ
+	namespacev_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/mul_1599: <built-in function mul>Jj
+pkg.torch.onnx.class_hierarchyH['_empty_nn_module_stack_from_metadata_hook', '<built-in function mul>']J~
+pkg.torch.onnx.fx_noded%mul_1599 : [num_users=1] = call_function[target=operator.mul](args = (2, %floordiv_2), kwargs = {})JW
+pkg.torch.onnx.name_scopes9['_empty_nn_module_stack_from_metadata_hook', 'mul_1599']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+Ë
+val_3
+mul_1599add_578node_add_578"AddJÇ
+	namespaceu_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/add_578: <built-in function add>Jj
+pkg.torch.onnx.class_hierarchyH['_empty_nn_module_stack_from_metadata_hook', '<built-in function add>']J{
+pkg.torch.onnx.fx_nodea%add_578 : [num_users=2] = call_function[target=operator.add](args = (2, %mul_1599), kwargs = {})JV
+pkg.torch.onnx.name_scopes8['_empty_nn_module_stack_from_metadata_hook', 'add_578']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+Ò
+val_3
+
+floordiv_3mul_1600node_mul_1600"MulJÉ
+	namespacev_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/mul_1600: <built-in function mul>Jj
+pkg.torch.onnx.class_hierarchyH['_empty_nn_module_stack_from_metadata_hook', '<built-in function mul>']J~
+pkg.torch.onnx.fx_noded%mul_1600 : [num_users=1] = call_function[target=operator.mul](args = (2, %floordiv_3), kwargs = {})JW
+pkg.torch.onnx.name_scopes9['_empty_nn_module_stack_from_metadata_hook', 'mul_1600']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+Ë
+val_3
+mul_1600add_579node_add_579"AddJÇ
+	namespaceu_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/add_579: <built-in function add>Jj
+pkg.torch.onnx.class_hierarchyH['_empty_nn_module_stack_from_metadata_hook', '<built-in function add>']J{
+pkg.torch.onnx.fx_nodea%add_579 : [num_users=2] = call_function[target=operator.add](args = (2, %mul_1600), kwargs = {})JV
+pkg.torch.onnx.name_scopes8['_empty_nn_module_stack_from_metadata_hook', 'add_579']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ó
+val_5
+add_578add_8
+node_add_8"AddJ@
+	namespace3: __main__.UpCunet2x/add_8: <built-in function add>JS
+pkg.torch.onnx.class_hierarchy1['__main__.UpCunet2x', '<built-in function add>']Jy
+pkg.torch.onnx.fx_node_%add_8 : [num_users=1] = call_function[target=operator.add](args = (18, %add_578), kwargs = {})J+
+pkg.torch.onnx.name_scopes['', 'add_8']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+¢
+add_8
+sym_size_int_59subnode_sub"SubJ>
+	namespace1: __main__.UpCunet2x/sub: <built-in function sub>JS
+pkg.torch.onnx.class_hierarchy1['__main__.UpCunet2x', '<built-in function sub>']JÉ
+pkg.torch.onnx.fx_nodei%sub : [num_users=1] = call_function[target=operator.sub](args = (%add_8, %sym_size_int_59), kwargs = {})J)
+pkg.torch.onnx.name_scopes['', 'sub']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+ó
+val_5
+add_579add_9
+node_add_9"AddJ@
+	namespace3: __main__.UpCunet2x/add_9: <built-in function add>JS
+pkg.torch.onnx.class_hierarchy1['__main__.UpCunet2x', '<built-in function add>']Jy
+pkg.torch.onnx.fx_node_%add_9 : [num_users=1] = call_function[target=operator.add](args = (18, %add_579), kwargs = {})J+
+pkg.torch.onnx.name_scopes['', 'add_9']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+¨
+add_9
+sym_size_int_58sub_1
+node_sub_1"SubJ@
+	namespace3: __main__.UpCunet2x/sub_1: <built-in function sub>JS
+pkg.torch.onnx.class_hierarchy1['__main__.UpCunet2x', '<built-in function sub>']JÖ
+pkg.torch.onnx.fx_nodek%sub_1 : [num_users=1] = call_function[target=operator.sub](args = (%add_9, %sym_size_int_58), kwargs = {})J+
+pkg.torch.onnx.name_scopes['', 'sub_1']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+¿
+sub
+val_7val_8node_Reshape_8"Reshape*
+	allowzero †J7
+	namespace*: __main__.UpCunet2x/pad: aten.pad.defaultJL
+pkg.torch.onnx.class_hierarchy*['__main__.UpCunet2x', 'aten.pad.default']Jù
+pkg.torch.onnx.fx_nodeÇ%pad : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%x, [18, %sub, 18, %sub_1], reflect), kwargs = {})J)
+pkg.torch.onnx.name_scopes['', 'pad']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+ƒ
+sub_1
+val_7val_10node_Reshape_10"Reshape*
+	allowzero †J7
+	namespace*: __main__.UpCunet2x/pad: aten.pad.defaultJL
+pkg.torch.onnx.class_hierarchy*['__main__.UpCunet2x', 'aten.pad.default']Jù
+pkg.torch.onnx.fx_nodeÇ%pad : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%x, [18, %sub, 18, %sub_1], reflect), kwargs = {})J)
+pkg.torch.onnx.name_scopes['', 'pad']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+Ï
+val_11
+val_11
+val_6
+val_6
+val_11
+val_11
+val_10
+val_8val_12node_Concat_12"Concat*
+axis †J7
+	namespace*: __main__.UpCunet2x/pad: aten.pad.defaultJL
+pkg.torch.onnx.class_hierarchy*['__main__.UpCunet2x', 'aten.pad.default']Jù
+pkg.torch.onnx.fx_nodeÇ%pad : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%x, [18, %sub, 18, %sub_1], reflect), kwargs = {})J)
+pkg.torch.onnx.name_scopes['', 'pad']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+π
+input
+val_12padnode_pad"Pad*
+mode"reflect†J7
+	namespace*: __main__.UpCunet2x/pad: aten.pad.defaultJL
+pkg.torch.onnx.class_hierarchy*['__main__.UpCunet2x', 'aten.pad.default']Jù
+pkg.torch.onnx.fx_nodeÇ%pad : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%x, [18, %sub, 18, %sub_1], reflect), kwargs = {})J)
+pkg.torch.onnx.name_scopes['', 'pad']J≠
+pkg.torch.onnx.stack_traceéFile "C:\Users\andre\repo\onnx-converter\main.py", line 169, in forward
+    x = F.pad(x, (18, 18 + pw - w0, 18, 18 + ph - h0), mode='reflect')
+Ü
+pad
+unet1.conv1.conv.0.weight
+unet1.conv1.conv.0.biasconv2dnode_conv2d"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J‹
+	namespaceŒ: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv1: __main__.UNetConv/unet1.conv1.conv: torch.nn.modules.container.Sequential/unet1.conv1.conv.0: torch.nn.modules.conv.Conv2d/conv2d: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']Jæ
+pkg.torch.onnx.fx_node£%conv2d : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%pad, %p_unet1_conv1_conv_0_weight, %p_unet1_conv1_conv_0_bias), kwargs = {})Jn
+pkg.torch.onnx.name_scopesP['', 'unet1', 'unet1.conv1', 'unet1.conv1.conv', 'unet1.conv1.conv.0', 'conv2d']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 108, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ó
+conv2d
+leaky_relunode_leaky_relu"	LeakyRelu*
+alphaÕÃÃ=†JÌ
+	namespaceﬂ: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv1: __main__.UNetConv/unet1.conv1.conv: torch.nn.modules.container.Sequential/unet1.conv1.conv.1: torch.nn.modules.activation.LeakyReLU/leaky_relu: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jì
+pkg.torch.onnx.fx_nodey%leaky_relu : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d, 0.1), kwargs = {})Jr
+pkg.torch.onnx.name_scopesT['', 'unet1', 'unet1.conv1', 'unet1.conv1.conv', 'unet1.conv1.conv.1', 'leaky_relu']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 108, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+û
+
+leaky_relu
+unet1.conv1.conv.2.weight
+unet1.conv1.conv.2.biasconv2d_1node_conv2d_1"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬁ
+	namespace–: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv1: __main__.UNetConv/unet1.conv1.conv: torch.nn.modules.container.Sequential/unet1.conv1.conv.2: torch.nn.modules.conv.Conv2d/conv2d_1: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J«
+pkg.torch.onnx.fx_node¨%conv2d_1 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu, %p_unet1_conv1_conv_2_weight, %p_unet1_conv1_conv_2_bias), kwargs = {})Jp
+pkg.torch.onnx.name_scopesR['', 'unet1', 'unet1.conv1', 'unet1.conv1.conv', 'unet1.conv1.conv.2', 'conv2d_1']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 108, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+•
+conv2d_1leaky_relu_1node_leaky_relu_1"	LeakyRelu*
+alphaÕÃÃ=†JÔ
+	namespace·: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv1: __main__.UNetConv/unet1.conv1.conv: torch.nn.modules.container.Sequential/unet1.conv1.conv.3: torch.nn.modules.activation.LeakyReLU/leaky_relu_1: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jó
+pkg.torch.onnx.fx_node}%leaky_relu_1 : [num_users=2] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_1, 0.1), kwargs = {})Jt
+pkg.torch.onnx.name_scopesV['', 'unet1', 'unet1.conv1', 'unet1.conv1.conv', 'unet1.conv1.conv.3', 'leaky_relu_1']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 108, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+˙
+leaky_relu_1
+unet1.conv1_down.weight
+unet1.conv1_down.biasconv2d_2node_conv2d_2"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †JÑ
+	namespacew: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv1_down: torch.nn.modules.conv.Conv2d/conv2d_2: aten.conv2d.defaultJÅ
+pkg.torch.onnx.class_hierarchy_['__main__.UpCunet2x', '__main__.UNet1', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']JÕ
+pkg.torch.onnx.fx_node≤%conv2d_2 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_1, %p_unet1_conv1_down_weight, %p_unet1_conv1_down_bias, [2, 2]), kwargs = {})JK
+pkg.torch.onnx.name_scopes-['', 'unet1', 'unet1.conv1_down', 'conv2d_2']Jî
+pkg.torch.onnx.stack_traceıFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 109, in forward
+    x2 = self.conv1_down(x1)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+∑
+leaky_relu_1
+val_13pad_1
+node_pad_1"Pad*
+mode"constant†JO
+	namespaceB: __main__.UpCunet2x/unet1: __main__.UNet1/pad_1: aten.pad.defaultJ^
+pkg.torch.onnx.class_hierarchy<['__main__.UpCunet2x', '__main__.UNet1', 'aten.pad.default']Jõ
+pkg.torch.onnx.fx_nodeÄ%pad_1 : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%leaky_relu_1, [-4, -4, -4, -4]), kwargs = {})J4
+pkg.torch.onnx.name_scopes['', 'unet1', 'pad_1']JÏ
+pkg.torch.onnx.stack_traceÕFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 110, in forward
+    x1 = F.pad(x1, (-4, -4, -4, -4))
+€
+conv2d_2leaky_relu_2node_leaky_relu_2"	LeakyRelu*
+alphaÕÃÃ=†J]
+	namespaceP: __main__.UpCunet2x/unet1: __main__.UNet1/leaky_relu_2: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet1', 'aten.leaky_relu.default']Jó
+pkg.torch.onnx.fx_node}%leaky_relu_2 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_2, 0.1), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'unet1', 'leaky_relu_2']JÙ
+pkg.torch.onnx.stack_trace’File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 111, in forward
+    x2 = F.leaky_relu(x2, 0.1, inplace=True)
+£
+leaky_relu_2
+unet1.conv2.conv.0.weight
+unet1.conv2.conv.0.biasconv2d_3node_conv2d_3"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬁ
+	namespace–: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.conv: torch.nn.modules.container.Sequential/unet1.conv2.conv.0: torch.nn.modules.conv.Conv2d/conv2d_3: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J…
+pkg.torch.onnx.fx_nodeÆ%conv2d_3 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_2, %p_unet1_conv2_conv_0_weight, %p_unet1_conv2_conv_0_bias), kwargs = {})Jp
+pkg.torch.onnx.name_scopesR['', 'unet1', 'unet1.conv2', 'unet1.conv2.conv', 'unet1.conv2.conv.0', 'conv2d_3']Jˇ
+pkg.torch.onnx.stack_trace‡File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+¶
+conv2d_3leaky_relu_3node_leaky_relu_3"	LeakyRelu*
+alphaÕÃÃ=†JÔ
+	namespace·: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.conv: torch.nn.modules.container.Sequential/unet1.conv2.conv.1: torch.nn.modules.activation.LeakyReLU/leaky_relu_3: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jó
+pkg.torch.onnx.fx_node}%leaky_relu_3 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_3, 0.1), kwargs = {})Jt
+pkg.torch.onnx.name_scopesV['', 'unet1', 'unet1.conv2', 'unet1.conv2.conv', 'unet1.conv2.conv.1', 'leaky_relu_3']Jä
+pkg.torch.onnx.stack_traceÎFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+£
+leaky_relu_3
+unet1.conv2.conv.2.weight
+unet1.conv2.conv.2.biasconv2d_4node_conv2d_4"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬁ
+	namespace–: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.conv: torch.nn.modules.container.Sequential/unet1.conv2.conv.2: torch.nn.modules.conv.Conv2d/conv2d_4: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J…
+pkg.torch.onnx.fx_nodeÆ%conv2d_4 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_3, %p_unet1_conv2_conv_2_weight, %p_unet1_conv2_conv_2_bias), kwargs = {})Jp
+pkg.torch.onnx.name_scopesR['', 'unet1', 'unet1.conv2', 'unet1.conv2.conv', 'unet1.conv2.conv.2', 'conv2d_4']Jˇ
+pkg.torch.onnx.stack_trace‡File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+¶
+conv2d_4leaky_relu_4node_leaky_relu_4"	LeakyRelu*
+alphaÕÃÃ=†JÔ
+	namespace·: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.conv: torch.nn.modules.container.Sequential/unet1.conv2.conv.3: torch.nn.modules.activation.LeakyReLU/leaky_relu_4: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jó
+pkg.torch.onnx.fx_node}%leaky_relu_4 : [num_users=2] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_4, 0.1), kwargs = {})Jt
+pkg.torch.onnx.name_scopesV['', 'unet1', 'unet1.conv2', 'unet1.conv2.conv', 'unet1.conv2.conv.3', 'leaky_relu_4']Jä
+pkg.torch.onnx.stack_traceÎFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+©
+leaky_relu_4
+val_16mean	node_mean"
+ReduceMean*
+keepdims†*
+noop_with_empty_axes †Jë
+	namespaceÉ: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.seblock: __main__.SEBlock/mean: aten.mean.dimJÑ
+pkg.torch.onnx.class_hierarchyb['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', '__main__.SEBlock', 'aten.mean.dim']Jí
+pkg.torch.onnx.fx_nodex%mean : [num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%leaky_relu_4, [2, 3], True), kwargs = {})JY
+pkg.torch.onnx.name_scopes;['', 'unet1', 'unet1.conv2', 'unet1.conv2.seblock', 'mean']J∫
+pkg.torch.onnx.stack_traceõFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 70, in forward
+    x0 = torch.mean(x, dim=(2, 3), keepdim=True)
+Å
+mean
+ unet1.conv2.seblock.conv1.weight
+unet1.conv2.seblock.conv1.biasconv2d_5node_conv2d_5"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J”
+	namespace≈: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.seblock: __main__.SEBlock/unet1.conv2.seblock.conv1: torch.nn.modules.conv.Conv2d/conv2d_5: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']Jœ
+pkg.torch.onnx.fx_node¥%conv2d_5 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%mean, %p_unet1_conv2_seblock_conv1_weight, %p_unet1_conv2_seblock_conv1_bias), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'unet1', 'unet1.conv2', 'unet1.conv2.seblock', 'unet1.conv2.seblock.conv1', 'conv2d_5']JÁ
+pkg.torch.onnx.stack_trace»File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+·
+conv2d_5relu	node_relu"ReluJï
+	namespaceá: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.seblock: __main__.SEBlock/relu: aten.relu.defaultJà
+pkg.torch.onnx.class_hierarchyf['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', '__main__.SEBlock', 'aten.relu.default']JÖ
+pkg.torch.onnx.fx_nodek%relu : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_5,), kwargs = {})JY
+pkg.torch.onnx.name_scopes;['', 'unet1', 'unet1.conv2', 'unet1.conv2.seblock', 'relu']J∑
+pkg.torch.onnx.stack_traceòFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+˙
+relu
+ unet1.conv2.seblock.conv2.weight
+unet1.conv2.seblock.conv2.biasconv2d_6node_conv2d_6"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J”
+	namespace≈: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.seblock: __main__.SEBlock/unet1.conv2.seblock.conv2: torch.nn.modules.conv.Conv2d/conv2d_6: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']Jœ
+pkg.torch.onnx.fx_node¥%conv2d_6 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu, %p_unet1_conv2_seblock_conv2_weight, %p_unet1_conv2_seblock_conv2_bias), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'unet1', 'unet1.conv2', 'unet1.conv2.seblock', 'unet1.conv2.seblock.conv2', 'conv2d_6']J‡
+pkg.torch.onnx.stack_trace¡File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ı
+conv2d_6sigmoidnode_sigmoid"SigmoidJõ
+	namespaceç: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.seblock: __main__.SEBlock/sigmoid: aten.sigmoid.defaultJã
+pkg.torch.onnx.class_hierarchyi['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', '__main__.SEBlock', 'aten.sigmoid.default']Jã
+pkg.torch.onnx.fx_nodeq%sigmoid : [num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%conv2d_6,), kwargs = {})J\
+pkg.torch.onnx.name_scopes>['', 'unet1', 'unet1.conv2', 'unet1.conv2.seblock', 'sigmoid']J∞
+pkg.torch.onnx.stack_traceëFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+Á
+leaky_relu_4
+sigmoidmul_392node_mul_392"MulJñ
+	namespaceà: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2: __main__.UNetConv/unet1.conv2.seblock: __main__.SEBlock/mul_392: aten.mul.TensorJÜ
+pkg.torch.onnx.class_hierarchyd['__main__.UpCunet2x', '__main__.UNet1', '__main__.UNetConv', '__main__.SEBlock', 'aten.mul.Tensor']Jì
+pkg.torch.onnx.fx_nodey%mul_392 : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%leaky_relu_4, %sigmoid), kwargs = {})J\
+pkg.torch.onnx.name_scopes>['', 'unet1', 'unet1.conv2', 'unet1.conv2.seblock', 'mul_392']Jõ
+pkg.torch.onnx.stack_trace¸File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 112, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 73, in forward
+    return x * x0
+π	
+mul_392
+unet1.conv2_up.weight
+unet1.conv2_up.biasconvolutionnode_convolution"ConvTranspose*
+output_padding@ @ †*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jî
+	namespaceÜ: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv2_up: torch.nn.modules.conv.ConvTranspose2d/convolution: aten.convolution.defaultJè
+pkg.torch.onnx.class_hierarchym['__main__.UpCunet2x', '__main__.UNet1', 'torch.nn.modules.conv.ConvTranspose2d', 'aten.convolution.default']JÌ
+pkg.torch.onnx.fx_node“%convolution : [num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_392, %p_unet1_conv2_up_weight, %p_unet1_conv2_up_bias, [2, 2], [0, 0], [1, 1], True, [0, 0], 1), kwargs = {})JL
+pkg.torch.onnx.name_scopes.['', 'unet1', 'unet1.conv2_up', 'convolution']Jı
+pkg.torch.onnx.stack_trace÷File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 113, in forward
+    x2 = self.conv2_up(x2)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 1198, in forward
+    return F.conv_transpose2d(
+‚
+convolutionleaky_relu_5node_leaky_relu_5"	LeakyRelu*
+alphaÕÃÃ=†J]
+	namespaceP: __main__.UpCunet2x/unet1: __main__.UNet1/leaky_relu_5: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet1', 'aten.leaky_relu.default']Jõ
+pkg.torch.onnx.fx_nodeÄ%leaky_relu_5 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%convolution, 0.1), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'unet1', 'leaky_relu_5']JÙ
+pkg.torch.onnx.stack_trace’File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 114, in forward
+    x2 = F.leaky_relu(x2, 0.1, inplace=True)
+ï
+pad_1
+leaky_relu_5add_163node_add_163"AddJP
+	namespaceC: __main__.UpCunet2x/unet1: __main__.UNet1/add_163: aten.add.TensorJ]
+pkg.torch.onnx.class_hierarchy;['__main__.UpCunet2x', '__main__.UNet1', 'aten.add.Tensor']Jë
+pkg.torch.onnx.fx_nodew%add_163 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%pad_1, %leaky_relu_5), kwargs = {})J6
+pkg.torch.onnx.name_scopes['', 'unet1', 'add_163']J‰
+pkg.torch.onnx.stack_trace≈File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 115, in forward
+    x3 = self.conv3(x1 + x2)
+…
+add_163
+unet1.conv3.weight
+unet1.conv3.biasconv2d_7node_conv2d_7"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J
+	namespacer: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv3: torch.nn.modules.conv.Conv2d/conv2d_7: aten.conv2d.defaultJÅ
+pkg.torch.onnx.class_hierarchy_['__main__.UpCunet2x', '__main__.UNet1', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J∂
+pkg.torch.onnx.fx_nodeõ%conv2d_7 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%add_163, %p_unet1_conv3_weight, %p_unet1_conv3_bias), kwargs = {})JF
+pkg.torch.onnx.name_scopes(['', 'unet1', 'unet1.conv3', 'conv2d_7']Jî
+pkg.torch.onnx.stack_traceıFile "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 115, in forward
+    x3 = self.conv3(x1 + x2)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+€
+conv2d_7leaky_relu_6node_leaky_relu_6"	LeakyRelu*
+alphaÕÃÃ=†J]
+	namespaceP: __main__.UpCunet2x/unet1: __main__.UNet1/leaky_relu_6: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet1', 'aten.leaky_relu.default']Jó
+pkg.torch.onnx.fx_node}%leaky_relu_6 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_7, 0.1), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'unet1', 'leaky_relu_6']JÙ
+pkg.torch.onnx.stack_trace’File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 116, in forward
+    x3 = F.leaky_relu(x3, 0.1, inplace=True)
+‰	
+leaky_relu_6
+unet1.conv_bottom.weight
+unet1.conv_bottom.biasconvolution_1node_convolution_1"ConvTranspose*
+output_padding@ @ †*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jô
+	namespaceã: __main__.UpCunet2x/unet1: __main__.UNet1/unet1.conv_bottom: torch.nn.modules.conv.ConvTranspose2d/convolution_1: aten.convolution.defaultJè
+pkg.torch.onnx.class_hierarchym['__main__.UpCunet2x', '__main__.UNet1', 'torch.nn.modules.conv.ConvTranspose2d', 'aten.convolution.default']J˙
+pkg.torch.onnx.fx_nodeﬂ%convolution_1 : [num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%leaky_relu_6, %p_unet1_conv_bottom_weight, %p_unet1_conv_bottom_bias, [2, 2], [3, 3], [1, 1], True, [0, 0], 1), kwargs = {})JQ
+pkg.torch.onnx.name_scopes3['', 'unet1', 'unet1.conv_bottom', 'convolution_1']J˙
+pkg.torch.onnx.stack_trace€File "C:\Users\andre\repo\onnx-converter\main.py", line 170, in forward
+    x1 = self.unet1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 117, in forward
+    return self.conv_bottom(x3)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 1198, in forward
+    return F.conv_transpose2d(
+Æ
+convolution_1
+unet2.conv1.conv.0.weight
+unet2.conv1.conv.0.biasconv2d_8node_conv2d_8"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬁ
+	namespace–: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv1: __main__.UNetConv/unet2.conv1.conv: torch.nn.modules.container.Sequential/unet2.conv1.conv.0: torch.nn.modules.conv.Conv2d/conv2d_8: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J 
+pkg.torch.onnx.fx_nodeØ%conv2d_8 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%convolution_1, %p_unet2_conv1_conv_0_weight, %p_unet2_conv1_conv_0_bias), kwargs = {})Jp
+pkg.torch.onnx.name_scopesR['', 'unet2', 'unet2.conv1', 'unet2.conv1.conv', 'unet2.conv1.conv.0', 'conv2d_8']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 138, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+Ø
+conv2d_8leaky_relu_7node_leaky_relu_7"	LeakyRelu*
+alphaÕÃÃ=†JÔ
+	namespace·: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv1: __main__.UNetConv/unet2.conv1.conv: torch.nn.modules.container.Sequential/unet2.conv1.conv.1: torch.nn.modules.activation.LeakyReLU/leaky_relu_7: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jó
+pkg.torch.onnx.fx_node}%leaky_relu_7 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_8, 0.1), kwargs = {})Jt
+pkg.torch.onnx.name_scopesV['', 'unet2', 'unet2.conv1', 'unet2.conv1.conv', 'unet2.conv1.conv.1', 'leaky_relu_7']Jì
+pkg.torch.onnx.stack_traceÙFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 138, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+¨
+leaky_relu_7
+unet2.conv1.conv.2.weight
+unet2.conv1.conv.2.biasconv2d_9node_conv2d_9"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬁ
+	namespace–: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv1: __main__.UNetConv/unet2.conv1.conv: torch.nn.modules.container.Sequential/unet2.conv1.conv.2: torch.nn.modules.conv.Conv2d/conv2d_9: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J…
+pkg.torch.onnx.fx_nodeÆ%conv2d_9 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_7, %p_unet2_conv1_conv_2_weight, %p_unet2_conv1_conv_2_bias), kwargs = {})Jp
+pkg.torch.onnx.name_scopesR['', 'unet2', 'unet2.conv1', 'unet2.conv1.conv', 'unet2.conv1.conv.2', 'conv2d_9']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 138, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+Ø
+conv2d_9leaky_relu_8node_leaky_relu_8"	LeakyRelu*
+alphaÕÃÃ=†JÔ
+	namespace·: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv1: __main__.UNetConv/unet2.conv1.conv: torch.nn.modules.container.Sequential/unet2.conv1.conv.3: torch.nn.modules.activation.LeakyReLU/leaky_relu_8: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jó
+pkg.torch.onnx.fx_node}%leaky_relu_8 : [num_users=2] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_9, 0.1), kwargs = {})Jt
+pkg.torch.onnx.name_scopesV['', 'unet2', 'unet2.conv1', 'unet2.conv1.conv', 'unet2.conv1.conv.3', 'leaky_relu_8']Jì
+pkg.torch.onnx.stack_traceÙFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 138, in forward
+    x1 = self.conv1(x)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+â	
+leaky_relu_8
+unet2.conv1_down.weight
+unet2.conv1_down.bias	conv2d_10node_conv2d_10"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †JÖ
+	namespacex: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv1_down: torch.nn.modules.conv.Conv2d/conv2d_10: aten.conv2d.defaultJÅ
+pkg.torch.onnx.class_hierarchy_['__main__.UpCunet2x', '__main__.UNet2', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']JŒ
+pkg.torch.onnx.fx_node≥%conv2d_10 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_8, %p_unet2_conv1_down_weight, %p_unet2_conv1_down_bias, [2, 2]), kwargs = {})JL
+pkg.torch.onnx.name_scopes.['', 'unet2', 'unet2.conv1_down', 'conv2d_10']Jû
+pkg.torch.onnx.stack_traceˇFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 139, in forward
+    x2 = self.conv1_down(x1)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+…
+leaky_relu_8
+val_17pad_2
+node_pad_2"Pad*
+mode"constant†JO
+	namespaceB: __main__.UpCunet2x/unet2: __main__.UNet2/pad_2: aten.pad.defaultJ^
+pkg.torch.onnx.class_hierarchy<['__main__.UpCunet2x', '__main__.UNet2', 'aten.pad.default']Jü
+pkg.torch.onnx.fx_nodeÑ%pad_2 : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%leaky_relu_8, [-16, -16, -16, -16]), kwargs = {})J4
+pkg.torch.onnx.name_scopes['', 'unet2', 'pad_2']J˙
+pkg.torch.onnx.stack_trace€File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 140, in forward
+    x1 = F.pad(x1, (-16, -16, -16, -16))
+Á
+	conv2d_10leaky_relu_9node_leaky_relu_9"	LeakyRelu*
+alphaÕÃÃ=†J]
+	namespaceP: __main__.UpCunet2x/unet2: __main__.UNet2/leaky_relu_9: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet2', 'aten.leaky_relu.default']Jò
+pkg.torch.onnx.fx_node~%leaky_relu_9 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_10, 0.1), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'unet2', 'leaky_relu_9']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 141, in forward
+    x2 = F.leaky_relu(x2, 0.1, inplace=True)
+≤
+leaky_relu_9
+unet2.conv2.conv.0.weight
+unet2.conv2.conv.0.bias	conv2d_11node_conv2d_11"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬂ
+	namespace—: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.conv: torch.nn.modules.container.Sequential/unet2.conv2.conv.0: torch.nn.modules.conv.Conv2d/conv2d_11: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J 
+pkg.torch.onnx.fx_nodeØ%conv2d_11 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_9, %p_unet2_conv2_conv_0_weight, %p_unet2_conv2_conv_0_bias), kwargs = {})Jq
+pkg.torch.onnx.name_scopesS['', 'unet2', 'unet2.conv2', 'unet2.conv2.conv', 'unet2.conv2.conv.0', 'conv2d_11']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+∑
+	conv2d_11leaky_relu_10node_leaky_relu_10"	LeakyRelu*
+alphaÕÃÃ=†J
+	namespace‚: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.conv: torch.nn.modules.container.Sequential/unet2.conv2.conv.1: torch.nn.modules.activation.LeakyReLU/leaky_relu_10: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_10 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_11, 0.1), kwargs = {})Ju
+pkg.torch.onnx.name_scopesW['', 'unet2', 'unet2.conv2', 'unet2.conv2.conv', 'unet2.conv2.conv.1', 'leaky_relu_10']Jî
+pkg.torch.onnx.stack_traceıFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+¥
+leaky_relu_10
+unet2.conv2.conv.2.weight
+unet2.conv2.conv.2.bias	conv2d_12node_conv2d_12"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬂ
+	namespace—: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.conv: torch.nn.modules.container.Sequential/unet2.conv2.conv.2: torch.nn.modules.conv.Conv2d/conv2d_12: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']JÀ
+pkg.torch.onnx.fx_node∞%conv2d_12 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_10, %p_unet2_conv2_conv_2_weight, %p_unet2_conv2_conv_2_bias), kwargs = {})Jq
+pkg.torch.onnx.name_scopesS['', 'unet2', 'unet2.conv2', 'unet2.conv2.conv', 'unet2.conv2.conv.2', 'conv2d_12']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+∑
+	conv2d_12leaky_relu_11node_leaky_relu_11"	LeakyRelu*
+alphaÕÃÃ=†J
+	namespace‚: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.conv: torch.nn.modules.container.Sequential/unet2.conv2.conv.3: torch.nn.modules.activation.LeakyReLU/leaky_relu_11: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_11 : [num_users=2] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_12, 0.1), kwargs = {})Ju
+pkg.torch.onnx.name_scopesW['', 'unet2', 'unet2.conv2', 'unet2.conv2.conv', 'unet2.conv2.conv.3', 'leaky_relu_11']Jî
+pkg.torch.onnx.stack_traceıFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+ø
+leaky_relu_11
+val_16mean_1node_mean_1"
+ReduceMean*
+keepdims†*
+noop_with_empty_axes †Jì
+	namespaceÖ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.seblock: __main__.SEBlock/mean_1: aten.mean.dimJÑ
+pkg.torch.onnx.class_hierarchyb['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.mean.dim']Jï
+pkg.torch.onnx.fx_node{%mean_1 : [num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%leaky_relu_11, [2, 3], True), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'unet2', 'unet2.conv2', 'unet2.conv2.seblock', 'mean_1']Jƒ
+pkg.torch.onnx.stack_trace•File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 70, in forward
+    x0 = torch.mean(x, dim=(2, 3), keepdim=True)
+î
+mean_1
+ unet2.conv2.seblock.conv1.weight
+unet2.conv2.seblock.conv1.bias	conv2d_13node_conv2d_13"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J‘
+	namespace∆: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.seblock: __main__.SEBlock/unet2.conv2.seblock.conv1: torch.nn.modules.conv.Conv2d/conv2d_13: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J“
+pkg.torch.onnx.fx_node∑%conv2d_13 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%mean_1, %p_unet2_conv2_seblock_conv1_weight, %p_unet2_conv2_seblock_conv1_bias), kwargs = {})J{
+pkg.torch.onnx.name_scopes]['', 'unet2', 'unet2.conv2', 'unet2.conv2.seblock', 'unet2.conv2.seblock.conv1', 'conv2d_13']JÒ
+pkg.torch.onnx.stack_trace“File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+˜
+	conv2d_13relu_1node_relu_1"ReluJó
+	namespaceâ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.seblock: __main__.SEBlock/relu_1: aten.relu.defaultJà
+pkg.torch.onnx.class_hierarchyf['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.relu.default']Jà
+pkg.torch.onnx.fx_noden%relu_1 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_13,), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'unet2', 'unet2.conv2', 'unet2.conv2.seblock', 'relu_1']J¡
+pkg.torch.onnx.stack_trace¢File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+ç
+relu_1
+ unet2.conv2.seblock.conv2.weight
+unet2.conv2.seblock.conv2.bias	conv2d_14node_conv2d_14"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J‘
+	namespace∆: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.seblock: __main__.SEBlock/unet2.conv2.seblock.conv2: torch.nn.modules.conv.Conv2d/conv2d_14: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J“
+pkg.torch.onnx.fx_node∑%conv2d_14 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_1, %p_unet2_conv2_seblock_conv2_weight, %p_unet2_conv2_seblock_conv2_bias), kwargs = {})J{
+pkg.torch.onnx.name_scopes]['', 'unet2', 'unet2.conv2', 'unet2.conv2.seblock', 'unet2.conv2.seblock.conv2', 'conv2d_14']JÍ
+pkg.torch.onnx.stack_traceÀFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ã
+	conv2d_14	sigmoid_1node_sigmoid_1"SigmoidJù
+	namespaceè: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.seblock: __main__.SEBlock/sigmoid_1: aten.sigmoid.defaultJã
+pkg.torch.onnx.class_hierarchyi['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.sigmoid.default']Jé
+pkg.torch.onnx.fx_nodet%sigmoid_1 : [num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%conv2d_14,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'unet2', 'unet2.conv2', 'unet2.conv2.seblock', 'sigmoid_1']J∫
+pkg.torch.onnx.stack_traceõFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+˜
+leaky_relu_11
+	sigmoid_1mul_939node_mul_939"MulJñ
+	namespaceà: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2: __main__.UNetConv/unet2.conv2.seblock: __main__.SEBlock/mul_939: aten.mul.TensorJÜ
+pkg.torch.onnx.class_hierarchyd['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.mul.Tensor']Jñ
+pkg.torch.onnx.fx_node|%mul_939 : [num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%leaky_relu_11, %sigmoid_1), kwargs = {})J\
+pkg.torch.onnx.name_scopes>['', 'unet2', 'unet2.conv2', 'unet2.conv2.seblock', 'mul_939']J•
+pkg.torch.onnx.stack_traceÜFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 142, in forward
+    x2 = self.conv2(x2)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 73, in forward
+    return x * x0
+ˇ
+mul_939
+unet2.conv2_down.weight
+unet2.conv2_down.bias	conv2d_15node_conv2d_15"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †JÖ
+	namespacex: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv2_down: torch.nn.modules.conv.Conv2d/conv2d_15: aten.conv2d.defaultJÅ
+pkg.torch.onnx.class_hierarchy_['__main__.UpCunet2x', '__main__.UNet2', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J…
+pkg.torch.onnx.fx_nodeÆ%conv2d_15 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%mul_939, %p_unet2_conv2_down_weight, %p_unet2_conv2_down_bias, [2, 2]), kwargs = {})JL
+pkg.torch.onnx.name_scopes.['', 'unet2', 'unet2.conv2_down', 'conv2d_15']Jû
+pkg.torch.onnx.stack_traceˇFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 143, in forward
+    x3 = self.conv2_down(x2)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+∂
+mul_939
+val_13pad_3
+node_pad_3"Pad*
+mode"constant†JO
+	namespaceB: __main__.UpCunet2x/unet2: __main__.UNet2/pad_3: aten.pad.defaultJ^
+pkg.torch.onnx.class_hierarchy<['__main__.UpCunet2x', '__main__.UNet2', 'aten.pad.default']Jï
+pkg.torch.onnx.fx_node{%pad_3 : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%mul_939, [-4, -4, -4, -4]), kwargs = {})J4
+pkg.torch.onnx.name_scopes['', 'unet2', 'pad_3']Jˆ
+pkg.torch.onnx.stack_trace◊File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 144, in forward
+    x2 = F.pad(x2, (-4, -4, -4, -4))
+Ï
+	conv2d_15leaky_relu_12node_leaky_relu_12"	LeakyRelu*
+alphaÕÃÃ=†J^
+	namespaceQ: __main__.UpCunet2x/unet2: __main__.UNet2/leaky_relu_12: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet2', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_12 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_15, 0.1), kwargs = {})J<
+pkg.torch.onnx.name_scopes['', 'unet2', 'leaky_relu_12']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 145, in forward
+    x3 = F.leaky_relu(x3, 0.1, inplace=True)
+¥
+leaky_relu_12
+unet2.conv3.conv.0.weight
+unet2.conv3.conv.0.bias	conv2d_16node_conv2d_16"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬂ
+	namespace—: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.conv: torch.nn.modules.container.Sequential/unet2.conv3.conv.0: torch.nn.modules.conv.Conv2d/conv2d_16: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']JÀ
+pkg.torch.onnx.fx_node∞%conv2d_16 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_12, %p_unet2_conv3_conv_0_weight, %p_unet2_conv3_conv_0_bias), kwargs = {})Jq
+pkg.torch.onnx.name_scopesS['', 'unet2', 'unet2.conv3', 'unet2.conv3.conv', 'unet2.conv3.conv.0', 'conv2d_16']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+∑
+	conv2d_16leaky_relu_13node_leaky_relu_13"	LeakyRelu*
+alphaÕÃÃ=†J
+	namespace‚: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.conv: torch.nn.modules.container.Sequential/unet2.conv3.conv.1: torch.nn.modules.activation.LeakyReLU/leaky_relu_13: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_13 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_16, 0.1), kwargs = {})Ju
+pkg.torch.onnx.name_scopesW['', 'unet2', 'unet2.conv3', 'unet2.conv3.conv', 'unet2.conv3.conv.1', 'leaky_relu_13']Jî
+pkg.torch.onnx.stack_traceıFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+¥
+leaky_relu_13
+unet2.conv3.conv.2.weight
+unet2.conv3.conv.2.bias	conv2d_17node_conv2d_17"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬂ
+	namespace—: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.conv: torch.nn.modules.container.Sequential/unet2.conv3.conv.2: torch.nn.modules.conv.Conv2d/conv2d_17: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']JÀ
+pkg.torch.onnx.fx_node∞%conv2d_17 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_13, %p_unet2_conv3_conv_2_weight, %p_unet2_conv3_conv_2_bias), kwargs = {})Jq
+pkg.torch.onnx.name_scopesS['', 'unet2', 'unet2.conv3', 'unet2.conv3.conv', 'unet2.conv3.conv.2', 'conv2d_17']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+∑
+	conv2d_17leaky_relu_14node_leaky_relu_14"	LeakyRelu*
+alphaÕÃÃ=†J
+	namespace‚: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.conv: torch.nn.modules.container.Sequential/unet2.conv3.conv.3: torch.nn.modules.activation.LeakyReLU/leaky_relu_14: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_14 : [num_users=2] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_17, 0.1), kwargs = {})Ju
+pkg.torch.onnx.name_scopesW['', 'unet2', 'unet2.conv3', 'unet2.conv3.conv', 'unet2.conv3.conv.3', 'leaky_relu_14']Jî
+pkg.torch.onnx.stack_traceıFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+ø
+leaky_relu_14
+val_16mean_2node_mean_2"
+ReduceMean*
+keepdims†*
+noop_with_empty_axes †Jì
+	namespaceÖ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.seblock: __main__.SEBlock/mean_2: aten.mean.dimJÑ
+pkg.torch.onnx.class_hierarchyb['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.mean.dim']Jï
+pkg.torch.onnx.fx_node{%mean_2 : [num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%leaky_relu_14, [2, 3], True), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'unet2', 'unet2.conv3', 'unet2.conv3.seblock', 'mean_2']Jƒ
+pkg.torch.onnx.stack_trace•File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 70, in forward
+    x0 = torch.mean(x, dim=(2, 3), keepdim=True)
+î
+mean_2
+ unet2.conv3.seblock.conv1.weight
+unet2.conv3.seblock.conv1.bias	conv2d_18node_conv2d_18"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J‘
+	namespace∆: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.seblock: __main__.SEBlock/unet2.conv3.seblock.conv1: torch.nn.modules.conv.Conv2d/conv2d_18: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J“
+pkg.torch.onnx.fx_node∑%conv2d_18 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%mean_2, %p_unet2_conv3_seblock_conv1_weight, %p_unet2_conv3_seblock_conv1_bias), kwargs = {})J{
+pkg.torch.onnx.name_scopes]['', 'unet2', 'unet2.conv3', 'unet2.conv3.seblock', 'unet2.conv3.seblock.conv1', 'conv2d_18']JÒ
+pkg.torch.onnx.stack_trace“File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+˜
+	conv2d_18relu_2node_relu_2"ReluJó
+	namespaceâ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.seblock: __main__.SEBlock/relu_2: aten.relu.defaultJà
+pkg.torch.onnx.class_hierarchyf['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.relu.default']Jà
+pkg.torch.onnx.fx_noden%relu_2 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_18,), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'unet2', 'unet2.conv3', 'unet2.conv3.seblock', 'relu_2']J¡
+pkg.torch.onnx.stack_trace¢File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+ç
+relu_2
+ unet2.conv3.seblock.conv2.weight
+unet2.conv3.seblock.conv2.bias	conv2d_19node_conv2d_19"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J‘
+	namespace∆: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.seblock: __main__.SEBlock/unet2.conv3.seblock.conv2: torch.nn.modules.conv.Conv2d/conv2d_19: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J“
+pkg.torch.onnx.fx_node∑%conv2d_19 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_2, %p_unet2_conv3_seblock_conv2_weight, %p_unet2_conv3_seblock_conv2_bias), kwargs = {})J{
+pkg.torch.onnx.name_scopes]['', 'unet2', 'unet2.conv3', 'unet2.conv3.seblock', 'unet2.conv3.seblock.conv2', 'conv2d_19']JÍ
+pkg.torch.onnx.stack_traceÀFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ã
+	conv2d_19	sigmoid_2node_sigmoid_2"SigmoidJù
+	namespaceè: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.seblock: __main__.SEBlock/sigmoid_2: aten.sigmoid.defaultJã
+pkg.torch.onnx.class_hierarchyi['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.sigmoid.default']Jé
+pkg.torch.onnx.fx_nodet%sigmoid_2 : [num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%conv2d_19,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'unet2', 'unet2.conv3', 'unet2.conv3.seblock', 'sigmoid_2']J∫
+pkg.torch.onnx.stack_traceõFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+¸
+leaky_relu_14
+	sigmoid_2mul_1182node_mul_1182"MulJó
+	namespaceâ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3: __main__.UNetConv/unet2.conv3.seblock: __main__.SEBlock/mul_1182: aten.mul.TensorJÜ
+pkg.torch.onnx.class_hierarchyd['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.mul.Tensor']Jó
+pkg.torch.onnx.fx_node}%mul_1182 : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%leaky_relu_14, %sigmoid_2), kwargs = {})J]
+pkg.torch.onnx.name_scopes?['', 'unet2', 'unet2.conv3', 'unet2.conv3.seblock', 'mul_1182']J•
+pkg.torch.onnx.stack_traceÜFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 146, in forward
+    x3 = self.conv3(x3)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 73, in forward
+    return x * x0
+œ	
+mul_1182
+unet2.conv3_up.weight
+unet2.conv3_up.biasconvolution_2node_convolution_2"ConvTranspose*
+output_padding@ @ †*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jñ
+	namespaceà: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv3_up: torch.nn.modules.conv.ConvTranspose2d/convolution_2: aten.convolution.defaultJè
+pkg.torch.onnx.class_hierarchym['__main__.UpCunet2x', '__main__.UNet2', 'torch.nn.modules.conv.ConvTranspose2d', 'aten.convolution.default']J
+pkg.torch.onnx.fx_node’%convolution_2 : [num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_1182, %p_unet2_conv3_up_weight, %p_unet2_conv3_up_bias, [2, 2], [0, 0], [1, 1], True, [0, 0], 1), kwargs = {})JN
+pkg.torch.onnx.name_scopes0['', 'unet2', 'unet2.conv3_up', 'convolution_2']Jˇ
+pkg.torch.onnx.stack_trace‡File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 147, in forward
+    x3 = self.conv3_up(x3)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 1198, in forward
+    return F.conv_transpose2d(
+ı
+convolution_2leaky_relu_15node_leaky_relu_15"	LeakyRelu*
+alphaÕÃÃ=†J^
+	namespaceQ: __main__.UpCunet2x/unet2: __main__.UNet2/leaky_relu_15: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet2', 'aten.leaky_relu.default']Jû
+pkg.torch.onnx.fx_nodeÉ%leaky_relu_15 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%convolution_2, 0.1), kwargs = {})J<
+pkg.torch.onnx.name_scopes['', 'unet2', 'leaky_relu_15']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 148, in forward
+    x3 = F.leaky_relu(x3, 0.1, inplace=True)
+©
+pad_3
+leaky_relu_15add_434node_add_434"AddJP
+	namespaceC: __main__.UpCunet2x/unet2: __main__.UNet2/add_434: aten.add.TensorJ]
+pkg.torch.onnx.class_hierarchy;['__main__.UpCunet2x', '__main__.UNet2', 'aten.add.Tensor']Jí
+pkg.torch.onnx.fx_nodex%add_434 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%pad_3, %leaky_relu_15), kwargs = {})J6
+pkg.torch.onnx.name_scopes['', 'unet2', 'add_434']Jˆ
+pkg.torch.onnx.stack_trace◊File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+µ
+add_434
+unet2.conv4.conv.0.weight
+unet2.conv4.conv.0.bias	conv2d_20node_conv2d_20"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬂ
+	namespace—: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.conv: torch.nn.modules.container.Sequential/unet2.conv4.conv.0: torch.nn.modules.conv.Conv2d/conv2d_20: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J≈
+pkg.torch.onnx.fx_node™%conv2d_20 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%add_434, %p_unet2_conv4_conv_0_weight, %p_unet2_conv4_conv_0_bias), kwargs = {})Jq
+pkg.torch.onnx.name_scopesS['', 'unet2', 'unet2.conv4', 'unet2.conv4.conv', 'unet2.conv4.conv.0', 'conv2d_20']Jñ
+pkg.torch.onnx.stack_trace˜File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ƒ
+	conv2d_20leaky_relu_16node_leaky_relu_16"	LeakyRelu*
+alphaÕÃÃ=†J
+	namespace‚: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.conv: torch.nn.modules.container.Sequential/unet2.conv4.conv.1: torch.nn.modules.activation.LeakyReLU/leaky_relu_16: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_16 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_20, 0.1), kwargs = {})Ju
+pkg.torch.onnx.name_scopesW['', 'unet2', 'unet2.conv4', 'unet2.conv4.conv', 'unet2.conv4.conv.1', 'leaky_relu_16']J°
+pkg.torch.onnx.stack_traceÇFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+¡
+leaky_relu_16
+unet2.conv4.conv.2.weight
+unet2.conv4.conv.2.bias	conv2d_21node_conv2d_21"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jﬂ
+	namespace—: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.conv: torch.nn.modules.container.Sequential/unet2.conv4.conv.2: torch.nn.modules.conv.Conv2d/conv2d_21: aten.conv2d.defaultJ¿
+pkg.torch.onnx.class_hierarchyù['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']JÀ
+pkg.torch.onnx.fx_node∞%conv2d_21 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_16, %p_unet2_conv4_conv_2_weight, %p_unet2_conv4_conv_2_bias), kwargs = {})Jq
+pkg.torch.onnx.name_scopesS['', 'unet2', 'unet2.conv4', 'unet2.conv4.conv', 'unet2.conv4.conv.2', 'conv2d_21']Jñ
+pkg.torch.onnx.stack_trace˜File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ƒ
+	conv2d_21leaky_relu_17node_leaky_relu_17"	LeakyRelu*
+alphaÕÃÃ=†J
+	namespace‚: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.conv: torch.nn.modules.container.Sequential/unet2.conv4.conv.3: torch.nn.modules.activation.LeakyReLU/leaky_relu_17: aten.leaky_relu.defaultJÕ
+pkg.torch.onnx.class_hierarchy™['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.LeakyReLU', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_17 : [num_users=2] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_21, 0.1), kwargs = {})Ju
+pkg.torch.onnx.name_scopesW['', 'unet2', 'unet2.conv4', 'unet2.conv4.conv', 'unet2.conv4.conv.3', 'leaky_relu_17']J°
+pkg.torch.onnx.stack_traceÇFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 88, in forward
+    z = self.conv(x)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\activation.py", line 922, in forward
+    return F.leaky_relu(input, self.negative_slope, self.inplace)
+Ã
+leaky_relu_17
+val_16mean_3node_mean_3"
+ReduceMean*
+keepdims†*
+noop_with_empty_axes †Jì
+	namespaceÖ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.seblock: __main__.SEBlock/mean_3: aten.mean.dimJÑ
+pkg.torch.onnx.class_hierarchyb['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.mean.dim']Jï
+pkg.torch.onnx.fx_node{%mean_3 : [num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%leaky_relu_17, [2, 3], True), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'unet2', 'unet2.conv4', 'unet2.conv4.seblock', 'mean_3']J—
+pkg.torch.onnx.stack_trace≤File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 70, in forward
+    x0 = torch.mean(x, dim=(2, 3), keepdim=True)
+°
+mean_3
+ unet2.conv4.seblock.conv1.weight
+unet2.conv4.seblock.conv1.bias	conv2d_22node_conv2d_22"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J‘
+	namespace∆: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.seblock: __main__.SEBlock/unet2.conv4.seblock.conv1: torch.nn.modules.conv.Conv2d/conv2d_22: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J“
+pkg.torch.onnx.fx_node∑%conv2d_22 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%mean_3, %p_unet2_conv4_seblock_conv1_weight, %p_unet2_conv4_seblock_conv1_bias), kwargs = {})J{
+pkg.torch.onnx.name_scopes]['', 'unet2', 'unet2.conv4', 'unet2.conv4.seblock', 'unet2.conv4.seblock.conv1', 'conv2d_22']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+Ñ
+	conv2d_22relu_3node_relu_3"ReluJó
+	namespaceâ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.seblock: __main__.SEBlock/relu_3: aten.relu.defaultJà
+pkg.torch.onnx.class_hierarchyf['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.relu.default']Jà
+pkg.torch.onnx.fx_noden%relu_3 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_22,), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'unet2', 'unet2.conv4', 'unet2.conv4.seblock', 'relu_3']JŒ
+pkg.torch.onnx.stack_traceØFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 71, in forward
+    x0 = F.relu(self.conv1(x0), inplace=True)
+ö
+relu_3
+ unet2.conv4.seblock.conv2.weight
+unet2.conv4.seblock.conv2.bias	conv2d_23node_conv2d_23"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †J‘
+	namespace∆: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.seblock: __main__.SEBlock/unet2.conv4.seblock.conv2: torch.nn.modules.conv.Conv2d/conv2d_23: aten.conv2d.defaultJ´
+pkg.torch.onnx.class_hierarchyà['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J“
+pkg.torch.onnx.fx_node∑%conv2d_23 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_3, %p_unet2_conv4_seblock_conv2_weight, %p_unet2_conv4_seblock_conv2_bias), kwargs = {})J{
+pkg.torch.onnx.name_scopes]['', 'unet2', 'unet2.conv4', 'unet2.conv4.seblock', 'unet2.conv4.seblock.conv2', 'conv2d_23']J˜
+pkg.torch.onnx.stack_traceÿFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ò
+	conv2d_23	sigmoid_3node_sigmoid_3"SigmoidJù
+	namespaceè: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.seblock: __main__.SEBlock/sigmoid_3: aten.sigmoid.defaultJã
+pkg.torch.onnx.class_hierarchyi['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.sigmoid.default']Jé
+pkg.torch.onnx.fx_nodet%sigmoid_3 : [num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%conv2d_23,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'unet2', 'unet2.conv4', 'unet2.conv4.seblock', 'sigmoid_3']J«
+pkg.torch.onnx.stack_trace®File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 72, in forward
+    x0 = torch.sigmoid(self.conv2(x0))
+â
+leaky_relu_17
+	sigmoid_3mul_1425node_mul_1425"MulJó
+	namespaceâ: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4: __main__.UNetConv/unet2.conv4.seblock: __main__.SEBlock/mul_1425: aten.mul.TensorJÜ
+pkg.torch.onnx.class_hierarchyd['__main__.UpCunet2x', '__main__.UNet2', '__main__.UNetConv', '__main__.SEBlock', 'aten.mul.Tensor']Jó
+pkg.torch.onnx.fx_node}%mul_1425 : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%leaky_relu_17, %sigmoid_3), kwargs = {})J]
+pkg.torch.onnx.name_scopes?['', 'unet2', 'unet2.conv4', 'unet2.conv4.seblock', 'mul_1425']J≤
+pkg.torch.onnx.stack_traceìFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 149, in forward
+    x4 = self.conv4(x2 + x3) * alpha
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 90, in forward
+    z = self.seblock(z)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 73, in forward
+    return x * x0
+œ	
+mul_1425
+unet2.conv4_up.weight
+unet2.conv4_up.biasconvolution_3node_convolution_3"ConvTranspose*
+output_padding@ @ †*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jñ
+	namespaceà: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv4_up: torch.nn.modules.conv.ConvTranspose2d/convolution_3: aten.convolution.defaultJè
+pkg.torch.onnx.class_hierarchym['__main__.UpCunet2x', '__main__.UNet2', 'torch.nn.modules.conv.ConvTranspose2d', 'aten.convolution.default']J
+pkg.torch.onnx.fx_node’%convolution_3 : [num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_1430, %p_unet2_conv4_up_weight, %p_unet2_conv4_up_bias, [2, 2], [0, 0], [1, 1], True, [0, 0], 1), kwargs = {})JN
+pkg.torch.onnx.name_scopes0['', 'unet2', 'unet2.conv4_up', 'convolution_3']Jˇ
+pkg.torch.onnx.stack_trace‡File "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 150, in forward
+    x4 = self.conv4_up(x4)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 1198, in forward
+    return F.conv_transpose2d(
+ı
+convolution_3leaky_relu_18node_leaky_relu_18"	LeakyRelu*
+alphaÕÃÃ=†J^
+	namespaceQ: __main__.UpCunet2x/unet2: __main__.UNet2/leaky_relu_18: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet2', 'aten.leaky_relu.default']Jû
+pkg.torch.onnx.fx_nodeÉ%leaky_relu_18 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%convolution_3, 0.1), kwargs = {})J<
+pkg.torch.onnx.name_scopes['', 'unet2', 'leaky_relu_18']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 151, in forward
+    x4 = F.leaky_relu(x4, 0.1, inplace=True)
+°
+pad_2
+leaky_relu_18add_534node_add_534"AddJP
+	namespaceC: __main__.UpCunet2x/unet2: __main__.UNet2/add_534: aten.add.TensorJ]
+pkg.torch.onnx.class_hierarchy;['__main__.UpCunet2x', '__main__.UNet2', 'aten.add.Tensor']Jí
+pkg.torch.onnx.fx_nodex%add_534 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%pad_2, %leaky_relu_18), kwargs = {})J6
+pkg.torch.onnx.name_scopes['', 'unet2', 'add_534']JÓ
+pkg.torch.onnx.stack_traceœFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 152, in forward
+    x5 = self.conv5(x1 + x4)
+Ÿ
+add_534
+unet2.conv5.weight
+unet2.conv5.bias	conv2d_24node_conv2d_24"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †JÄ
+	namespaces: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv5: torch.nn.modules.conv.Conv2d/conv2d_24: aten.conv2d.defaultJÅ
+pkg.torch.onnx.class_hierarchy_['__main__.UpCunet2x', '__main__.UNet2', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J∑
+pkg.torch.onnx.fx_nodeú%conv2d_24 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%add_534, %p_unet2_conv5_weight, %p_unet2_conv5_bias), kwargs = {})JG
+pkg.torch.onnx.name_scopes)['', 'unet2', 'unet2.conv5', 'conv2d_24']Jû
+pkg.torch.onnx.stack_traceˇFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 152, in forward
+    x5 = self.conv5(x1 + x4)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+Ï
+	conv2d_24leaky_relu_19node_leaky_relu_19"	LeakyRelu*
+alphaÕÃÃ=†J^
+	namespaceQ: __main__.UpCunet2x/unet2: __main__.UNet2/leaky_relu_19: aten.leaky_relu.defaultJe
+pkg.torch.onnx.class_hierarchyC['__main__.UpCunet2x', '__main__.UNet2', 'aten.leaky_relu.default']Jô
+pkg.torch.onnx.fx_node%leaky_relu_19 : [num_users=1] = call_function[target=torch.ops.aten.leaky_relu.default](args = (%conv2d_24, 0.1), kwargs = {})J<
+pkg.torch.onnx.name_scopes['', 'unet2', 'leaky_relu_19']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 153, in forward
+    x5 = F.leaky_relu(x5, 0.1, inplace=True)
+å	
+leaky_relu_19
+unet2.conv_bottom.weight
+unet2.conv_bottom.bias	conv2d_25node_conv2d_25"Conv*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †JÜ
+	namespacey: __main__.UpCunet2x/unet2: __main__.UNet2/unet2.conv_bottom: torch.nn.modules.conv.Conv2d/conv2d_25: aten.conv2d.defaultJÅ
+pkg.torch.onnx.class_hierarchy_['__main__.UpCunet2x', '__main__.UNet2', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J…
+pkg.torch.onnx.fx_nodeÆ%conv2d_25 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%leaky_relu_19, %p_unet2_conv_bottom_weight, %p_unet2_conv_bottom_bias), kwargs = {})JM
+pkg.torch.onnx.name_scopes/['', 'unet2', 'unet2.conv_bottom', 'conv2d_25']J°
+pkg.torch.onnx.stack_traceÇFile "C:\Users\andre\repo\onnx-converter\main.py", line 171, in forward
+    x2 = self.unet2(x1, alpha=1)
+  File "C:\Users\andre\repo\onnx-converter\main.py", line 154, in forward
+    return self.conv_bottom(x5)
+  File "C:\Users\andre\repo\onnx-converter\.venv\Lib\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+Æ
+convolution_1
+val_26pad_4
+node_pad_4"Pad*
+mode"constant†J9
+	namespace,: __main__.UpCunet2x/pad_4: aten.pad.defaultJL
+pkg.torch.onnx.class_hierarchy*['__main__.UpCunet2x', 'aten.pad.default']J†
+pkg.torch.onnx.fx_nodeÖ%pad_4 : [num_users=1] = call_function[target=torch.ops.aten.pad.default](args = (%convolution_1, [-20, -20, -20, -20]), kwargs = {})J+
+pkg.torch.onnx.name_scopes['', 'pad_4']Jé
+pkg.torch.onnx.stack_tracepFile "C:\Users\andre\repo\onnx-converter\main.py", line 172, in forward
+    x1 = F.pad(x1, (-20, -20, -20, -20))
+˙
+	conv2d_25
+pad_4outputnode_add_568"AddJ:
+	namespace-: __main__.UpCunet2x/add_568: aten.add.TensorJK
+pkg.torch.onnx.class_hierarchy)['__main__.UpCunet2x', 'aten.add.Tensor']Jé
+pkg.torch.onnx.fx_nodet%add_568 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%conv2d_25, %pad_4), kwargs = {})J-
+pkg.torch.onnx.name_scopes['', 'add_568']JÅ
+pkg.torch.onnx.stack_tracecFile "C:\Users\andre\repo\onnx-converter\main.py", line 173, in forward
+    out = torch.add(x2, x1)
+main_graph*u Bunet1.conv1.conv.0.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset12800j
+length3456p*† Bunet1.conv1.conv.0.biasJÄ!æ¥:»∫¶ªÁ0¿9‘<Ω9É:ºeñûºﬂ≈"Ω`<b∑®£ø∆@=›bJ8≥?û>}„®ªq¶;D¬æ}Î¡ºÊ
+Zæˇ0ΩGª]∫Óô>¨l=≈&‚;ªûÿ;∏ëg8¬»£<ËáÏ8,äA8E®-<L<bç%ºdOøËè<*w@ Bunet1.conv1.conv.2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset333824j
+length73728p*†@Bunet1.conv1.conv.2.biasJÄˇ¨√æ	w=|ˆ,=„}ºK8@æ±£âΩLÃjΩêÎ#∫≈44º√|ΩToJæÛ;L<Ky>=„=ß[!ΩR|ºB-æìæ∫‚€9¿ë=zë<â§Œ<¡Úãª?è•Ω≈˘º
+!z<˝Ωh$Ãº‰(OΩ|v)=ØÜ=p· Ω,\—<ïªJ˚;ÖÃºQjÉΩ¡‹=^ºC=ãΩ”É< ∂Ñº›+=nfëæÄ]ºÒ∆;j<Ω<ñÀœΩ^VΩ”‚æYr±ΩÌ±.<¨§ÔæÍ¥ΩyÛ;3/pºlÿ.ΩÚ#◊æ˙biº÷ŸX=DëbΩ’É–<Ù¢÷º*t@@Bunet1.conv1_down.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset71680j
+length65536p*û@Bunet1.conv1_down.biasJÄ  )=|-w<QÖòºä+ÀΩ–#MΩ+æ’<ò¢}<ﬁ€<*Xˆº±òæ¨ï˛ºr≤=y=Ó)Qær4_=ZAF;Ì[=∫å†∫˚õõ=Ò}π=iJ{º®%=∆ç4ºTpäΩá.æ®Ç„=ü“&=f[ùΩÊπ;W¥ûΩx}ΩΩÃ3∆<Ä=8òÙ=¶ao=¯ <.ßD=®ªï"„ΩU-Ω¢B@Ω∞è=läΩ∫˝é=åfz;Æ(R=Ó¶Ω∆($Ω€P5=«-üΩä&ä=úâñæb@J=Ÿ ∏ªræàÂß=az=)©—ºívæá˘ÄΩE˚≥=ô=aÍ¨<BÉõ=*zÄ@Bunet1.conv2.conv.0.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset1595392j
+length294912p*iÄBunet1.conv2.conv.0.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset0j
+length512p*z@ÄBunet1.conv2.conv.2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset1890304j
+length294912p*†@Bunet1.conv2.conv.2.biasJÄ
+åè=/â‰ΩØQMæç¶>=¢√?‡[?ÏÑ;æUM⁄Ω#{F?xÌ±Ωo◊tΩt‚æ9ú‰Ω∆èôæd.w?H¢ZΩ,
+,>N“æπƒ>ßß>F&>Å√ÄæRÜæ|V?>˝Ïgæós(?P3£Ωz ?ïX^º}Èá>≤JΩ±äŸ=mæºAw∏=n•ª–?]pq>|*>>9˝Ω
+8ﬂ>é∑#æNxÙæfí‡=°k™æw?∏ç?˘ &?ΩåsæH4O<,5b>5Œ˛Ω%"?Óﬁ?ôÜúΩà≤»ΩNû±>È%>F<
+< «M>•≈æ{óJ?…ÜÃΩõ‚>¿ß∏=*{@B unet1.conv2.seblock.conv1.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset4608j
+length2048p*FBunet1.conv2.seblock.conv1.biasJ £o?ZÍ<˘¥LΩ˘◊ª>%Mr>ÇI/?—…¶ΩÂ3?*{@B unet1.conv2.seblock.conv2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset6656j
+length2048p*ß@Bunet1.conv2.seblock.conv2.biasJÄ™›sæÒæºñœæu·Pø‡Y?±LÖøËéoøëe$=@øò”ræ\êSøÜˇfø£)™æ…Nëø©?®æ–øÖò5æéxùø °æÌ:Ìæa˘ΩZÈGøzAïøÒˇø/Óæ]˛cæ‰±øFÖPø|ø∆"Ì<Â>æΩ|røù∑æ>†˙=§Ææ √ï>˚˚´æ)^ø°<a>›·æ¸ìÓ;h¿øëπølÍ`øë™∫∞<>ãF˙Ω”åH>cÚ|øÁ]Qøé¯æ—ÙÎæ¥Ïæà≤>ÆfÑø`ÊkæßrIø–çŒ?h∑J?lCø*-åæÎ∫uæ5™øjïúæ*s@@Bunet1.conv2_up.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset137216j
+length65536p*ú@Bunet1.conv2_up.biasJÄíiÔ<ì§ˆ<ÕÌú<"$<⁄˜9<NFY;é•õ<Ì¸±:ô˚4< L®º~µ<vi«<k√£æ´¶MºÖ
+ÒΩë≠<ôò:Ú1+<nJ=tí¡<…dÙ<Hd∂<π5 <CæÍ<jÁó:s‰U=“H=£†ıºåe–;yuªÙ\¬<‰º"9o ì<9dDæ0 ºde¡;â?*<'¿=jHÅ<X=naÔΩÅÖ∏<.‘ΩÕ1ºã]G<Â™<óÂö<Œ” =ògp<¡>…<©6º»LR<Mkºy©ö<∂£”ºI_<‡\=Z#`º≤sAº∂∞=YıR=°bs<‘‚CΩà™Ò;*q@@Bunet1.conv3.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset481280j
+length147456p*ô@Bunet1.conv3.biasJÄ≠ ºàΩêAºí†¸º« mΩ[â◊<nsåº¢LùΩ=ˆΩ©$`æ¸Ä^ºÛó ΩûÚæjts=º_z<Êç6æSÂΩ é’Ω*Æè<;ôΩŸCà9‚€ Ωtû†ºYAΩ—º∆ΩÔÛ°=b3.Ωi#ΩBù≠<rE1æjòçΩ’Ä ;Ú±‚Ω\ß≠ΩˇkΩÇŸÊ;ÃuªºãdÛΩwΩà‹ëΩbﬂΩÃµª÷+pΩãv_Ωï·ΩF?ßΩ\Ñª⁄+¥æÖΩ>‡øΩ@∞^æU∑ÁΩ“¶æãw+ºn:uΩ·ı›=O;ºs›]ºÏ wºnfΩ{Ç9ΩãÌæ÷(Ω*u@Bunet1.conv_bottom.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset59392j
+length12288p**Bunet1.conv_bottom.biasJıÄß;sfº≥Åªª*u Bunet2.conv1.conv.0.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset16256j
+length3456p*† Bunet2.conv1.conv.0.biasJÄêáªÄT∞Ω≠›ÖΩ¯b—ΩÛï∑ªlÕ8;ÛPé;í∞5<º2iªÌ≈8º~/9æ0ÓP<Ç%ùª}5<’ΩﬂÑ;fœƒΩî‘àºQ}‹<d=Ü;]Û˘ª
+RX<˙$5Ω†πV;I≥àΩe≤ñΩC”-æ¬∑Ω#x|;‚	PºIp<u¥º*w@ Bunet2.conv1.conv.2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset407552j
+length73728p*†@Bunet2.conv1.conv.2.biasJÄ&†Ω!0â=¢Kæµ<!áº®0<Ç¥,ª˝=lΩÊÌwΩ?./ΩZΩ$…”Ω*oCΩøMÛ;≤ø#Ωﬂ?6=>Ö=Œ¸îªµNΩ=ÓºŸÅ√Ω2ã{Ω…vRΩßÊUºI/ºvï´=?ùπªpú;FQ#<…ZΩJ⁄4Ω˙Óº6}=à∂ΩÓºÇπªˆRºπ˘Q:Óz=’LòºO:=í{<Î	º ∏=K'∫Á¬†<≠¯M=˚¥»ºöÂŸª[¬öª…8º∂∫ΩÉtë;Åä	ΩÏ®õ<<Ô∫ºæ–∑º´≤êΩÁÇ¨ºtvU=Xe⁄Ωƒ9Ã<Í_ô=ˆéΩ*u@@Bunet2.conv1_down.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset202752j
+length65536p*û@Bunet2.conv1_down.biasJÄ‡YÏ=°YΩ|√ªäwÑΩ;‡ŸºŒ±"Ω5ãΩbù!Ω÷=Æ<›à¶<§ô+=R/2<”Â=∑Ω£:úqXΩa-qΩ££ºŒôΩÏ´ºk£y=Úg@ΩßıÚΩ“:;SÎDΩ®:πvˇΩ"WMæ&P<?·(∫&#±ºÛÒ<õoaæ÷á
+æ†¿öΩÛÿ=\Kß;∞uí=*WÃ;bcW=◊§•8-eNΩx∑Ω;T@=˛ëi99ÌUªA◊5Ω§·º=äzΩπiı;πíΩÍËB=Å◊ºÇéìºl&†=N∑⁄ºè2i<Úuº;4'}ΩM§°=∑Øº[|@Ω7Ωº71YΩ*x@@Bunet2.conv2.conv.0.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset628736j
+length147456p*†@Bunet2.conv2.conv.0.biasJÄ_ß3ºE°ΩzªZ<ÆˇÑª°
+´æÌßæœº:]Ω≠˙:æ∂o§Ω≠ïçæÏ/uΩhI=/ôΩ>:y=›s´ΩÃÛ´Ω]ìΩT_ø{fª¸%µª¡-2ΩTâﬂæ^»<ÉŒâº%·<ﬂÕ)æ’>b¢ª¯(æ(eΩπºs<-≠=-/Ω¬=HÀ =0bb=ÃoΩÉà¢ΩVÑ…ΩßPΩb˘ª˛ú˝ΩE´/Ω˝«nΩå¥;Ωr´Ÿ<*`0=¨i¶:q2èΩ¯ÖΩpA˜Ωîìò<P! æ|Àº¡Õ¯="S=cx&ΩÅbQæ´x>™`Ω‘¨fº®'†Ω‘Çﬂ<*zÄ@Bunet2.conv2.conv.2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset2185216j
+length294912p*kÄBunet2.conv2.conv.2.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset512j
+length512p*}ÄB unet2.conv2.seblock.conv1.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset26624j
+length8192p*fBunet2.conv2.seblock.conv1.biasJ@ks;?≥´8?5Dç=X >=ä>™Ä'æSr"Ωèè‘ΩÉ”w=π~‡>=?Gf=KA>È`ò>◊{∞>
+Bÿ<*}ÄB unet2.conv2.seblock.conv2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset34816j
+length8192p*sÄBunet2.conv2.seblock.conv2.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset1024j
+length512p*yÄÄBunet2.conv2_down.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset1071104j
+length262144p*jÄBunet2.conv2_down.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset1536j
+length512p*|ÄÄBunet2.conv3.conv.0.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset2818048j
+length1179648p*mÄBunet2.conv3.conv.0.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset3584j
+length1024p*|ÄÄBunet2.conv3.conv.2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset3997696j
+length1179648p*lÄBunet2.conv3.conv.2.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset2048j
+length512p*}ÄB unet2.conv3.seblock.conv1.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset43008j
+length8192p*fBunet2.conv3.seblock.conv1.biasJ@-¸—>Är∞<≥ΩÀ ?l˘Z=qM>@K°>bJ?ßù>˛Àº=ú"Ω{;ñΩßò>ﬁ±k>≥TΩµ¸©>*}ÄB unet2.conv3.seblock.conv2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset51200j
+length8192p*sÄBunet2.conv3.seblock.conv2.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset2560j
+length512p*wÄÄBunet2.conv3_up.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset1333248j
+length262144p*hÄBunet2.conv3_up.biasj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset3072j
+length512p*z@ÄBunet2.conv4.conv.0.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset2480128j
+length294912p*†@Bunet2.conv4.conv.0.biasJÄÕ‰ƒª≤ÌΩ√Ω¯ºä@Åæ©Ñæ?¡Ræê#«æ•˙ø.ãè:Îı> Ö∑æ˘Âª=q≈ø8ïÄæ$ÆºeˆΩR·aæ˙úæ¬æﬂ$§=äMæz6ûøcd@æΩ≤æìkõ=âæ‚î æÓræ˝?>≈:,Ω&Éõæ∞¯¶ºãtæ7äΩ}√ÒΩ8Ã!æfª>üb=È?:æŒÅæjèHæ«F2æ%û6>4*=Ω¢æb £ªü1N;∂´*=O—∆<£µWΩª·D>IÅç="G™Ωßé(æ˙V◊ΩNvæ∂vΩJ-ÖΩ®∂˙ºóúaæD∂û>!≈Uæ1ÆSæÏôDæ*x@@Bunet2.conv4.conv.2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset776192j
+length147456p*†@Bunet2.conv4.conv.2.biasJÄ4 ΩÊk…>ïWùºVñœΩüwør±">Í
+?£#–Ω◊ç?œæ1AC?'Èæ%ô$æidΩhf>ZªÓæX'µ>-Ÿy>›∂£>∑õ>C∆æTIæ∑Üùæ“Õ¶æ%Ÿí>	aË=Âˆj=…•‹>(ÔmΩÁΩ¯æS¢Ô>Ït=K~Œ=Sß˘æûÒøeØæ”∏Ù>i„´>"ﬁ[>∆G∑∫kÄ_?08Ωæ’3;>Bﬁ>D/Ç>Ç„\?aàø≥ô≥æ6*x>êT>Û>?¯%A=òøw›◊º§Ñ…=Ñ¢á=•≤…=+á>9Û?èøƒ‰∫æm#=∞√R>¡Ÿx>*{@B unet2.conv4.seblock.conv1.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset8704j
+length2048p*FBunet2.conv4.seblock.conv1.biasJ 6¶q?tÉœæıŒ‹>˚Vu?Û?/FÍæÙ˜Ã>OP~?*|@B unet2.conv4.seblock.conv2.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset10752j
+length2048p*ß@Bunet2.conv4.seblock.conv2.biasJÄ≤*Áæ¢ÛræPh æÿaæs7™>‡1øQ:üæœÁÛΩÜ©søt§æCy>æ	≥æ<®Éæ≥ô>XbÍæaµºæñ–0ø)øØ„”>¬+.øòæïæ˜åE>L@éæùæôæ®pŒΩH™ëæ˛ïµæÜ)æÈs·æF/øü2Ùæ±ÄøWÊø˙ø¡Öæ66òæ⁄~±æø	M´æX‚Ω≠J≈æ%{æàzøëàº=Q·Ä>›«·æıUXæ>}Jø∞Oùæ—∂)ø¥√gøPøFó™æÿœøB*ÊΩ∫w>Á¿øÔ”ø<Ô†øªÅº„Ï8ø¡º#ø⁄Ù∆æ”›;æ*s@@Bunet2.conv4_up.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset268288j
+length65536p*ú@Bunet2.conv4_up.biasJÄˆkºæEˆæ≤aê>
+ÄHΩvìªÆ1‚ª[‹æ˜™h∫M¨ª@[ÃΩnˆ9ªb◊å;∑·H; ‰€;{3;®@(ºH ê∫*H:≈€Ï∫vÅå∫w»≤ªíÏﬁ∫£‡H8Ö6w;≥#<·LøiÍ&ø(' :ÏÏ;nq∫~Ç<ˆO#ªq˚ŸΩ1/z;ßªÍΩ!’º`≠∆:ƒJt;ü#£ªò˝”ªYQªºIÈêª’≠öΩ%˘
+ø°ºU©:âxSæ?:ª!ãKΩ◊I8cH&ºó;Ëiƒª
+Ñïª‡ æÃ‰ä; DÁ;∂îè:¡≤|9ªG ;œ¥∞<3´xæm˘tø±¬Bº*q@@Bunet2.conv5.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset923648j
+length147456p*ô@Bunet2.conv5.biasJÄ-Ê=™í>¥«[>÷çΩ›G˘=ˇË=≤:=†Ú¢=D—ùæ≠_>î >ÓÙS>¥ÁrΩm®æªÏ=°{ë<°5=~hªΩ'ñºæsåy=œ(M=Æ®√º{Ö¢=ân¶æä&>Â˚˛=%(+ΩäÒˆ=Q“jæÕwΩ≥q?- Ω∆W-æıŒ–º+>RËä>ú◊æSqê=ÖØ§=(UæºA:<Êò⁄Ω¥%=»ÔΩ=ÒÓOΩúö=>ıÌ¸;Ù™I=ÉVΩ2˝ñ=ﬁÖª=€çºŸ£>Ä4>Uà=à]Öº'g>…çæ*>É•l>b‚b=ã∂=YL	æÚ»Ω*t@Bunet2.conv_bottom.weightj+
+locationup2x-latest-denoise1x.onnx.dataj
+offset19712j
+length6912p**Bunet2.conv_bottom.biasJÉGÎ>;ï©>õÇµ>*Bval_16J              *Bval_2Jˇˇˇˇˇˇˇˇ*Bval_3J       *Bval_5J       *Bval_6J       *Bval_7Jˇˇˇˇˇˇˇˇ*Bval_11J        *NBval_13J@                ¸ˇˇˇˇˇˇˇ¸ˇˇˇˇˇˇˇ                ¸ˇˇˇˇˇˇˇ¸ˇˇˇˇˇˇˇ*NBval_17J@                ˇˇˇˇˇˇˇˇˇˇˇˇˇˇ                ˇˇˇˇˇˇˇˇˇˇˇˇˇˇ*NBval_26J@                ÏˇˇˇˇˇˇˇÏˇˇˇˇˇˇˇ                ÏˇˇˇˇˇˇˇÏˇˇˇˇˇˇˇZ⁄
+input+
+)%
+
+batch_size
+
+height
+width"=
+/pkg.torch.export.graph_signature.InputSpec.kind
+USER_INPUT"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"&
+!pkg.torch.onnx.original_node_namexb 
+outputQ
+OK
+
+batch_size
+
+4*(((height - 1)//2)) + 4
+4*(((width - 1)//2)) + 4"?
+0pkg.torch.export.graph_signature.OutputSpec.kindUSER_OUTPUT",
+!pkg.torch.onnx.original_node_nameadd_568jÚ
+unet1.conv1.conv.0.weight
+
+ 
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet1_conv1_conv_0_weightj‚
+unet1.conv1.conv.0.bias
+
+
+ "<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet1_conv1_conv_0_biasjÚ
+unet1.conv1.conv.2.weight
+
+@
+ 
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet1_conv1_conv_2_weightj‚
+unet1.conv1.conv.2.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet1_conv1_conv_2_biasjÓ
+unet1.conv1_down.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet1_conv1_down_weightjﬁ
+unet1.conv1_down.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_unet1_conv1_down_biasjÛ
+unet1.conv2.conv.0.weight
+
+Ä
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet1_conv2_conv_0_weightj„
+unet1.conv2.conv.0.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet1_conv2_conv_0_biasjÛ
+unet1.conv2.conv.2.weight
+
+@
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet1_conv2_conv_2_weightj‚
+unet1.conv2.conv.2.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet1_conv2_conv_2_biasjÄ
+ unet1.conv2.seblock.conv1.weight
+
+
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet1_conv2_seblock_conv1_weightj
+unet1.conv2.seblock.conv1.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet1_conv2_seblock_conv1_biasjÄ
+ unet1.conv2.seblock.conv2.weight
+
+@
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet1_conv2_seblock_conv2_weightj
+unet1.conv2.seblock.conv2.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet1_conv2_seblock_conv2_biasjÍ
+unet1.conv2_up.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_unet1_conv2_up_weightj⁄
+unet1.conv2_up.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone":
+!pkg.torch.onnx.original_node_namep_unet1_conv2_up_biasj‰
+unet1.conv3.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"9
+!pkg.torch.onnx.original_node_namep_unet1_conv3_weightj‘
+unet1.conv3.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"7
+!pkg.torch.onnx.original_node_namep_unet1_conv3_biasj
+unet1.conv_bottom.weight
+
+@
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"?
+!pkg.torch.onnx.original_node_namep_unet1_conv_bottom_weightj‡
+unet1.conv_bottom.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"=
+!pkg.torch.onnx.original_node_namep_unet1_conv_bottom_biasjÚ
+unet2.conv1.conv.0.weight
+
+ 
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv1_conv_0_weightj‚
+unet2.conv1.conv.0.bias
+
+
+ "<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv1_conv_0_biasjÚ
+unet2.conv1.conv.2.weight
+
+@
+ 
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv1_conv_2_weightj‚
+unet2.conv1.conv.2.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv1_conv_2_biasjÓ
+unet2.conv1_down.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv1_down_weightjﬁ
+unet2.conv1_down.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_unet2_conv1_down_biasjÚ
+unet2.conv2.conv.0.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv2_conv_0_weightj‚
+unet2.conv2.conv.0.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv2_conv_0_biasjÛ
+unet2.conv2.conv.2.weight
+
+Ä
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv2_conv_2_weightj„
+unet2.conv2.conv.2.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv2_conv_2_biasjÅ
+ unet2.conv2.seblock.conv1.weight
+
+
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet2_conv2_seblock_conv1_weightj
+unet2.conv2.seblock.conv1.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet2_conv2_seblock_conv1_biasjÅ
+ unet2.conv2.seblock.conv2.weight
+
+Ä
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet2_conv2_seblock_conv2_weightjÒ
+unet2.conv2.seblock.conv2.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet2_conv2_seblock_conv2_biasj
+unet2.conv2_down.weight
+
+Ä
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv2_down_weightjﬂ
+unet2.conv2_down.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_unet2_conv2_down_biasjÙ
+unet2.conv3.conv.0.weight
+
+Ä
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv3_conv_0_weightj„
+unet2.conv3.conv.0.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv3_conv_0_biasjÙ
+unet2.conv3.conv.2.weight
+
+Ä
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv3_conv_2_weightj„
+unet2.conv3.conv.2.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv3_conv_2_biasjÅ
+ unet2.conv3.seblock.conv1.weight
+
+
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet2_conv3_seblock_conv1_weightj
+unet2.conv3.seblock.conv1.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet2_conv3_seblock_conv1_biasjÅ
+ unet2.conv3.seblock.conv2.weight
+
+Ä
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet2_conv3_seblock_conv2_weightjÒ
+unet2.conv3.seblock.conv2.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet2_conv3_seblock_conv2_biasjÏ
+unet2.conv3_up.weight
+
+Ä
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_unet2_conv3_up_weightj€
+unet2.conv3_up.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone":
+!pkg.torch.onnx.original_node_namep_unet2_conv3_up_biasjÛ
+unet2.conv4.conv.0.weight
+
+@
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv4_conv_0_weightj‚
+unet2.conv4.conv.0.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv4_conv_0_biasjÚ
+unet2.conv4.conv.2.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"@
+!pkg.torch.onnx.original_node_namep_unet2_conv4_conv_2_weightj‚
+unet2.conv4.conv.2.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_unet2_conv4_conv_2_biasjÄ
+ unet2.conv4.seblock.conv1.weight
+
+
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet2_conv4_seblock_conv1_weightj
+unet2.conv4.seblock.conv1.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet2_conv4_seblock_conv1_biasjÄ
+ unet2.conv4.seblock.conv2.weight
+
+@
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"G
+!pkg.torch.onnx.original_node_name"p_unet2_conv4_seblock_conv2_weightj
+unet2.conv4.seblock.conv2.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"E
+!pkg.torch.onnx.original_node_name p_unet2_conv4_seblock_conv2_biasjÍ
+unet2.conv4_up.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_unet2_conv4_up_weightj⁄
+unet2.conv4_up.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone":
+!pkg.torch.onnx.original_node_namep_unet2_conv4_up_biasj‰
+unet2.conv5.weight
+
+@
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"9
+!pkg.torch.onnx.original_node_namep_unet2_conv5_weightj‘
+unet2.conv5.bias
+
+
+@"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"7
+!pkg.torch.onnx.original_node_namep_unet2_conv5_biasj
+unet2.conv_bottom.weight
+
+
+@
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"?
+!pkg.torch.onnx.original_node_namep_unet2_conv_bottom_weightj‡
+unet2.conv_bottom.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"=
+!pkg.torch.onnx.original_node_namep_unet2_conv_bottom_biasjR
+val_16
+
+
+"<
+$pkg.onnxscript.optimizer.folded_from['val_14', 'val_15']j
+val_2
+ j
+val_3
+ j
+val_5
+ j
+val_6
+
+
+j
+val_7
+
+
+j
+val_11
+
+
+j
+val_13
+
+
+j
+val_17
+
+
+j
+val_26
+
+
+j
+val_0
+
+
+j
+sym_size_int_58
+ j
+val_1
+
+
+j
+sym_size_int_59
+ j
+add_574
+ j
+
+floordiv_2
+ j
+add_576
+ j
+
+floordiv_3
+ j
+mul_1599
+ j
+add_578
+ j
+mul_1600
+ j
+add_579
+ j
+add_8
+ j
+sub
+ j
+add_9
+ j
+sub_1
+ j
+val_8
+
+
+j
+val_10
+
+
+j
+val_12
+
+
+jZ
+padS
+QM
+
+batch_size
+
+2*(((height - 1)//2)) + 38
+2*(((width - 1)//2)) + 38j]
+conv2dS
+QM
+
+batch_size
+ 
+2*(((height - 1)//2)) + 36
+2*(((width - 1)//2)) + 36ja
+
+leaky_reluS
+QM
+
+batch_size
+ 
+2*(((height - 1)//2)) + 36
+2*(((width - 1)//2)) + 36j_
+conv2d_1S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 34
+2*(((width - 1)//2)) + 34jc
+leaky_relu_1S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 34
+2*(((width - 1)//2)) + 34j[
+conv2d_2O
+MI
+
+batch_size
+@
+(((height - 1)//2)) + 17
+(((width - 1)//2)) + 17j\
+pad_1S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 26
+2*(((width - 1)//2)) + 26j_
+leaky_relu_2O
+MI
+
+batch_size
+@
+(((height - 1)//2)) + 17
+(((width - 1)//2)) + 17j\
+conv2d_3P
+NJ
+
+batch_size
+Ä
+(((height - 1)//2)) + 15
+(((width - 1)//2)) + 15j`
+leaky_relu_3P
+NJ
+
+batch_size
+Ä
+(((height - 1)//2)) + 15
+(((width - 1)//2)) + 15j[
+conv2d_4O
+MI
+
+batch_size
+@
+(((height - 1)//2)) + 13
+(((width - 1)//2)) + 13j_
+leaky_relu_4O
+MI
+
+batch_size
+@
+(((height - 1)//2)) + 13
+(((width - 1)//2)) + 13j(
+mean 
+
+
+batch_size
+@
+
+j,
+conv2d_5 
+
+
+batch_size
+
+
+j(
+relu 
+
+
+batch_size
+
+
+j,
+conv2d_6 
+
+
+batch_size
+@
+
+j+
+sigmoid 
+
+
+batch_size
+@
+
+jZ
+mul_392O
+MI
+
+batch_size
+@
+(((height - 1)//2)) + 13
+(((width - 1)//2)) + 13jb
+convolutionS
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 26
+2*(((width - 1)//2)) + 26jc
+leaky_relu_5S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 26
+2*(((width - 1)//2)) + 26j^
+add_163S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 26
+2*(((width - 1)//2)) + 26j_
+conv2d_7S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 24
+2*(((width - 1)//2)) + 24jc
+leaky_relu_6S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 24
+2*(((width - 1)//2)) + 24jd
+convolution_1S
+QM
+
+batch_size
+
+4*(((height - 1)//2)) + 44
+4*(((width - 1)//2)) + 44j_
+conv2d_8S
+QM
+
+batch_size
+ 
+4*(((height - 1)//2)) + 42
+4*(((width - 1)//2)) + 42jc
+leaky_relu_7S
+QM
+
+batch_size
+ 
+4*(((height - 1)//2)) + 42
+4*(((width - 1)//2)) + 42j_
+conv2d_9S
+QM
+
+batch_size
+@
+4*(((height - 1)//2)) + 40
+4*(((width - 1)//2)) + 40jc
+leaky_relu_8S
+QM
+
+batch_size
+@
+4*(((height - 1)//2)) + 40
+4*(((width - 1)//2)) + 40j`
+	conv2d_10S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 20
+2*(((width - 1)//2)) + 20jZ
+pad_2Q
+OK
+
+batch_size
+@
+4*(((height - 1)//2)) + 8
+4*(((width - 1)//2)) + 8jc
+leaky_relu_9S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 20
+2*(((width - 1)//2)) + 20j`
+	conv2d_11S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 18
+2*(((width - 1)//2)) + 18jd
+leaky_relu_10S
+QM
+
+batch_size
+@
+2*(((height - 1)//2)) + 18
+2*(((width - 1)//2)) + 18ja
+	conv2d_12T
+RN
+
+batch_size
+Ä
+2*(((height - 1)//2)) + 16
+2*(((width - 1)//2)) + 16je
+leaky_relu_11T
+RN
+
+batch_size
+Ä
+2*(((height - 1)//2)) + 16
+2*(((width - 1)//2)) + 16j+
+mean_1!
+
+
+batch_size
+Ä
+
+j-
+	conv2d_13 
+
+
+batch_size
+
+
+j*
+relu_1 
+
+
+batch_size
+
+
+j.
+	conv2d_14!
+
+
+batch_size
+Ä
+
+j.
+	sigmoid_1!
+
+
+batch_size
+Ä
+
+j_
+mul_939T
+RN
+
+batch_size
+Ä
+2*(((height - 1)//2)) + 16
+2*(((width - 1)//2)) + 16j[
+	conv2d_15N
+LH
+
+batch_size
+Ä
+(((height - 1)//2)) + 8
+(((width - 1)//2)) + 8j[
+pad_3R
+PL
+
+batch_size
+Ä
+2*(((height - 1)//2)) + 8
+2*(((width - 1)//2)) + 8j_
+leaky_relu_12N
+LH
+
+batch_size
+Ä
+(((height - 1)//2)) + 8
+(((width - 1)//2)) + 8j[
+	conv2d_16N
+LH
+
+batch_size
+Ä
+(((height - 1)//2)) + 6
+(((width - 1)//2)) + 6j_
+leaky_relu_13N
+LH
+
+batch_size
+Ä
+(((height - 1)//2)) + 6
+(((width - 1)//2)) + 6j[
+	conv2d_17N
+LH
+
+batch_size
+Ä
+(((height - 1)//2)) + 4
+(((width - 1)//2)) + 4j_
+leaky_relu_14N
+LH
+
+batch_size
+Ä
+(((height - 1)//2)) + 4
+(((width - 1)//2)) + 4j+
+mean_2!
+
+
+batch_size
+Ä
+
+j-
+	conv2d_18 
+
+
+batch_size
+
+
+j*
+relu_2 
+
+
+batch_size
+
+
+j.
+	conv2d_19!
+
+
+batch_size
+Ä
+
+j.
+	sigmoid_2!
+
+
+batch_size
+Ä
+
+jZ
+mul_1182N
+LH
+
+batch_size
+Ä
+(((height - 1)//2)) + 4
+(((width - 1)//2)) + 4jc
+convolution_2R
+PL
+
+batch_size
+Ä
+2*(((height - 1)//2)) + 8
+2*(((width - 1)//2)) + 8jc
+leaky_relu_15R
+PL
+
+batch_size
+Ä
+2*(((height - 1)//2)) + 8
+2*(((width - 1)//2)) + 8j]
+add_434R
+PL
+
+batch_size
+Ä
+2*(((height - 1)//2)) + 8
+2*(((width - 1)//2)) + 8j^
+	conv2d_20Q
+OK
+
+batch_size
+@
+2*(((height - 1)//2)) + 6
+2*(((width - 1)//2)) + 6jb
+leaky_relu_16Q
+OK
+
+batch_size
+@
+2*(((height - 1)//2)) + 6
+2*(((width - 1)//2)) + 6j^
+	conv2d_21Q
+OK
+
+batch_size
+@
+2*(((height - 1)//2)) + 4
+2*(((width - 1)//2)) + 4jb
+leaky_relu_17Q
+OK
+
+batch_size
+@
+2*(((height - 1)//2)) + 4
+2*(((width - 1)//2)) + 4j*
+mean_3 
+
+
+batch_size
+@
+
+j-
+	conv2d_22 
+
+
+batch_size
+
+
+j*
+relu_3 
+
+
+batch_size
+
+
+j-
+	conv2d_23 
+
+
+batch_size
+@
+
+j-
+	sigmoid_3 
+
+
+batch_size
+@
+
+j]
+mul_1425Q
+OK
+
+batch_size
+@
+2*(((height - 1)//2)) + 4
+2*(((width - 1)//2)) + 4jb
+convolution_3Q
+OK
+
+batch_size
+@
+4*(((height - 1)//2)) + 8
+4*(((width - 1)//2)) + 8jb
+leaky_relu_18Q
+OK
+
+batch_size
+@
+4*(((height - 1)//2)) + 8
+4*(((width - 1)//2)) + 8j\
+add_534Q
+OK
+
+batch_size
+@
+4*(((height - 1)//2)) + 8
+4*(((width - 1)//2)) + 8j^
+	conv2d_24Q
+OK
+
+batch_size
+@
+4*(((height - 1)//2)) + 6
+4*(((width - 1)//2)) + 6jb
+leaky_relu_19Q
+OK
+
+batch_size
+@
+4*(((height - 1)//2)) + 6
+4*(((width - 1)//2)) + 6j^
+	conv2d_25Q
+OK
+
+batch_size
+
+4*(((height - 1)//2)) + 4
+4*(((width - 1)//2)) + 4jZ
+pad_4Q
+OK
+
+batch_size
+
+4*(((height - 1)//2)) + 4
+4*(((width - 1)//2)) + 4Ç•#
+0pkg.torch.export.ExportedProgram.graph_signature"
+# inputs
+p_unet1_conv1_conv_0_weight: PARAMETER target='unet1.conv1.conv.0.weight'
+p_unet1_conv1_conv_0_bias: PARAMETER target='unet1.conv1.conv.0.bias'
+p_unet1_conv1_conv_2_weight: PARAMETER target='unet1.conv1.conv.2.weight'
+p_unet1_conv1_conv_2_bias: PARAMETER target='unet1.conv1.conv.2.bias'
+p_unet1_conv1_down_weight: PARAMETER target='unet1.conv1_down.weight'
+p_unet1_conv1_down_bias: PARAMETER target='unet1.conv1_down.bias'
+p_unet1_conv2_conv_0_weight: PARAMETER target='unet1.conv2.conv.0.weight'
+p_unet1_conv2_conv_0_bias: PARAMETER target='unet1.conv2.conv.0.bias'
+p_unet1_conv2_conv_2_weight: PARAMETER target='unet1.conv2.conv.2.weight'
+p_unet1_conv2_conv_2_bias: PARAMETER target='unet1.conv2.conv.2.bias'
+p_unet1_conv2_seblock_conv1_weight: PARAMETER target='unet1.conv2.seblock.conv1.weight'
+p_unet1_conv2_seblock_conv1_bias: PARAMETER target='unet1.conv2.seblock.conv1.bias'
+p_unet1_conv2_seblock_conv2_weight: PARAMETER target='unet1.conv2.seblock.conv2.weight'
+p_unet1_conv2_seblock_conv2_bias: PARAMETER target='unet1.conv2.seblock.conv2.bias'
+p_unet1_conv2_up_weight: PARAMETER target='unet1.conv2_up.weight'
+p_unet1_conv2_up_bias: PARAMETER target='unet1.conv2_up.bias'
+p_unet1_conv3_weight: PARAMETER target='unet1.conv3.weight'
+p_unet1_conv3_bias: PARAMETER target='unet1.conv3.bias'
+p_unet1_conv_bottom_weight: PARAMETER target='unet1.conv_bottom.weight'
+p_unet1_conv_bottom_bias: PARAMETER target='unet1.conv_bottom.bias'
+p_unet2_conv1_conv_0_weight: PARAMETER target='unet2.conv1.conv.0.weight'
+p_unet2_conv1_conv_0_bias: PARAMETER target='unet2.conv1.conv.0.bias'
+p_unet2_conv1_conv_2_weight: PARAMETER target='unet2.conv1.conv.2.weight'
+p_unet2_conv1_conv_2_bias: PARAMETER target='unet2.conv1.conv.2.bias'
+p_unet2_conv1_down_weight: PARAMETER target='unet2.conv1_down.weight'
+p_unet2_conv1_down_bias: PARAMETER target='unet2.conv1_down.bias'
+p_unet2_conv2_conv_0_weight: PARAMETER target='unet2.conv2.conv.0.weight'
+p_unet2_conv2_conv_0_bias: PARAMETER target='unet2.conv2.conv.0.bias'
+p_unet2_conv2_conv_2_weight: PARAMETER target='unet2.conv2.conv.2.weight'
+p_unet2_conv2_conv_2_bias: PARAMETER target='unet2.conv2.conv.2.bias'
+p_unet2_conv2_seblock_conv1_weight: PARAMETER target='unet2.conv2.seblock.conv1.weight'
+p_unet2_conv2_seblock_conv1_bias: PARAMETER target='unet2.conv2.seblock.conv1.bias'
+p_unet2_conv2_seblock_conv2_weight: PARAMETER target='unet2.conv2.seblock.conv2.weight'
+p_unet2_conv2_seblock_conv2_bias: PARAMETER target='unet2.conv2.seblock.conv2.bias'
+p_unet2_conv2_down_weight: PARAMETER target='unet2.conv2_down.weight'
+p_unet2_conv2_down_bias: PARAMETER target='unet2.conv2_down.bias'
+p_unet2_conv3_conv_0_weight: PARAMETER target='unet2.conv3.conv.0.weight'
+p_unet2_conv3_conv_0_bias: PARAMETER target='unet2.conv3.conv.0.bias'
+p_unet2_conv3_conv_2_weight: PARAMETER target='unet2.conv3.conv.2.weight'
+p_unet2_conv3_conv_2_bias: PARAMETER target='unet2.conv3.conv.2.bias'
+p_unet2_conv3_seblock_conv1_weight: PARAMETER target='unet2.conv3.seblock.conv1.weight'
+p_unet2_conv3_seblock_conv1_bias: PARAMETER target='unet2.conv3.seblock.conv1.bias'
+p_unet2_conv3_seblock_conv2_weight: PARAMETER target='unet2.conv3.seblock.conv2.weight'
+p_unet2_conv3_seblock_conv2_bias: PARAMETER target='unet2.conv3.seblock.conv2.bias'
+p_unet2_conv3_up_weight: PARAMETER target='unet2.conv3_up.weight'
+p_unet2_conv3_up_bias: PARAMETER target='unet2.conv3_up.bias'
+p_unet2_conv4_conv_0_weight: PARAMETER target='unet2.conv4.conv.0.weight'
+p_unet2_conv4_conv_0_bias: PARAMETER target='unet2.conv4.conv.0.bias'
+p_unet2_conv4_conv_2_weight: PARAMETER target='unet2.conv4.conv.2.weight'
+p_unet2_conv4_conv_2_bias: PARAMETER target='unet2.conv4.conv.2.bias'
+p_unet2_conv4_seblock_conv1_weight: PARAMETER target='unet2.conv4.seblock.conv1.weight'
+p_unet2_conv4_seblock_conv1_bias: PARAMETER target='unet2.conv4.seblock.conv1.bias'
+p_unet2_conv4_seblock_conv2_weight: PARAMETER target='unet2.conv4.seblock.conv2.weight'
+p_unet2_conv4_seblock_conv2_bias: PARAMETER target='unet2.conv4.seblock.conv2.bias'
+p_unet2_conv4_up_weight: PARAMETER target='unet2.conv4_up.weight'
+p_unet2_conv4_up_bias: PARAMETER target='unet2.conv4_up.bias'
+p_unet2_conv5_weight: PARAMETER target='unet2.conv5.weight'
+p_unet2_conv5_bias: PARAMETER target='unet2.conv5.bias'
+p_unet2_conv_bottom_weight: PARAMETER target='unet2.conv_bottom.weight'
+p_unet2_conv_bottom_bias: PARAMETER target='unet2.conv_bottom.bias'
+x: USER_INPUT
+
+# outputs
+add_568: USER_OUTPUT
+Çs
+2pkg.torch.export.ExportedProgram.range_constraints={s77: VR[0, int_oo], s53: VR[19, int_oo], s0: VR[19, int_oo]}B
+ 

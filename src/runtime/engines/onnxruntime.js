@@ -1,4 +1,4 @@
-// ONNX Runtime adapter using RealESRGAN x2 model (dynamic axes: batch, height, width).
+// ONNX Runtime adapter — model-agnostic engine. Configure the active model via onnxActiveModel (see onnx-models.js).
 
 /** @type {Promise<any> | null} */
 let onnxSessionPromise = null;
@@ -38,33 +38,55 @@ const onnxWorkerLaneStates = {
     [ONNX_WORKER_LANE_BACKGROUND]: createOnnxWorkerLaneState()
 };
 
-const ONNX_MODEL_PATH = 'models/realesrgan_2xplus.onnx';
-const ONNX_MODEL_EXTERNAL_DATA_PATH = 'models/realesrgan_2xplus.onnx.data';
 const ONNX_WORKER_PATH = 'src/workers/onnxruntime.worker.js';
-const ONNX_MODEL_LABEL = 'REALESRGAN_2XPLUS_ONNX';
-const ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES = [
-    'realesrgan_2xplus.onnx.data',
-    'realesrgan_2xplus_dynamic.onnx.data'
-];
 const ONNX_CACHE_DB_NAME = 'manga-scaler-onnx-artifacts';
 const ONNX_CACHE_STORE_NAME = 'artifacts';
-const ONNX_CACHE_SCHEMA_VERSION = 'v1';
-const ONNX_MAX_FOREGROUND_PIXELS = 1600000;
-const ONNX_MAX_SINGLE_PASS_PIXELS = 900000;
-const ONNX_TILE_OVERLAP_PIXELS = 16;
-const ONNX_MIN_TILE_EDGE_PIXELS = 128;
-const ONNX_MAX_TILE_EDGE_PIXELS = 512;
 const ONNX_TILE_YIELD_MS = 0;
 const ONNX_TILE_YIELD_EVERY_TILES = 4;
-const ONNX_MODEL_INPUT_ALIGNMENT = 2;
 const ONNX_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
+const ONNX_MODEL_SWITCH_FALLBACK_KEY = 'realesrgan-2xplus';
 let onnxCacheDbPromise = null;
+let activeOnnxModelKey = null;
 
 function getOnnxNow() {
     if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
         return performance.now();
     }
     return Date.now();
+}
+
+function normalizeOnnxModelSelectionFromSettings(runtimeSettings = getRuntimePreferenceSnapshot()) {
+    const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
+    if (typeof normalizeOnnxModelKey === 'function') {
+        return normalizeOnnxModelKey(settings.selectedOnnxModel);
+    }
+    return String(settings.selectedOnnxModel || ONNX_MODEL_SWITCH_FALLBACK_KEY);
+}
+
+function applyOnnxModelSelection(runtimeSettings = getRuntimePreferenceSnapshot()) {
+    const selectedModelKey = normalizeOnnxModelSelectionFromSettings(runtimeSettings);
+
+    if (activeOnnxModelKey === selectedModelKey) {
+        return;
+    }
+
+    const previousModelKey = activeOnnxModelKey;
+    activeOnnxModelKey = selectedModelKey;
+
+    if (typeof setOnnxActiveModelByKey === 'function') {
+        setOnnxActiveModelByKey(selectedModelKey);
+    }
+
+    if (previousModelKey !== null) {
+        resetOnnxAdapterState();
+    }
+
+    runtimeLog('onnx:model-selected', {
+        previousModelKey,
+        selectedModelKey,
+        modelLabel: onnxActiveModel.label,
+        modelPath: onnxActiveModel.modelPath
+    });
 }
 
 function normalizeOnnxExecutionLane(lane) {
@@ -98,6 +120,17 @@ function serializeOnnxError(error) {
         name: asAny.name ? String(asAny.name) : null,
         stack: typeof asAny.stack === 'string' ? asAny.stack.split('\n').slice(0, 4).join('\n') : null
     };
+}
+
+function isOnnxProtobufParseFailure(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    if (!message) return false;
+
+    return (
+        message.includes('protobuf parsing failed') ||
+        message.includes('failed to load model because protobuf parsing failed') ||
+        message.includes('error_code: 7')
+    );
 }
 
 function formatOnnxDurationMs(startAt, endAt = getOnnxNow()) {
@@ -141,14 +174,17 @@ function getOnnxModelUrl() {
     if (!chrome?.runtime?.getURL) {
         throw new Error('chrome.runtime.getURL is unavailable for ONNX model loading');
     }
-    return chrome.runtime.getURL(ONNX_MODEL_PATH);
+    return chrome.runtime.getURL(onnxActiveModel.modelPath);
 }
 
 function getOnnxExternalDataUrl() {
+    if (!onnxActiveModel.externalDataPath) {
+        return null;
+    }
     if (!chrome?.runtime?.getURL) {
         throw new Error('chrome.runtime.getURL is unavailable for ONNX external data loading');
     }
-    return chrome.runtime.getURL(ONNX_MODEL_EXTERNAL_DATA_PATH);
+    return chrome.runtime.getURL(onnxActiveModel.externalDataPath);
 }
 
 function getOnnxWorkerUrl() {
@@ -437,31 +473,60 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
 
     laneState.readyPromise = (async () => {
         const startedAt = getOnnxNow();
-        const artifacts = await loadOnnxArtifacts();
-        const modelBuffer = cloneTypedArrayForTransfer(artifacts.modelBytes);
-        const externalDataBuffer = cloneTypedArrayForTransfer(artifacts.externalDataBytes);
+        async function dispatchWorkerInit(forceRefresh = false) {
+            const artifacts = await loadOnnxArtifacts({ forceRefresh });
+            const modelBuffer = cloneTypedArrayForTransfer(artifacts.modelBytes);
+            const externalDataBuffer = artifacts.externalDataBytes
+                ? cloneTypedArrayForTransfer(artifacts.externalDataBytes)
+                : null;
 
-        runtimeLog('onnx:worker-init-dispatch', {
-            lane: normalizedLane,
-            modelBytes: artifacts.modelBytes.byteLength,
-            externalDataBytes: artifacts.externalDataBytes.byteLength,
-            modelCacheHit: artifacts.modelCacheHit,
-            externalDataCacheHit: artifacts.externalDataCacheHit
-        });
+            runtimeLog('onnx:worker-init-dispatch', {
+                lane: normalizedLane,
+                forceRefresh,
+                modelBytes: artifacts.modelBytes.byteLength,
+                externalDataBytes: artifacts.externalDataBytes ? artifacts.externalDataBytes.byteLength : 0,
+                modelCacheHit: artifacts.modelCacheHit,
+                externalDataCacheHit: artifacts.externalDataCacheHit
+            });
 
-        try {
-            const initResult = await postOnnxWorkerRequest('init', {
+            const transferList = [modelBuffer];
+            if (externalDataBuffer) {
+                transferList.push(externalDataBuffer);
+            }
+
+            return postOnnxWorkerRequest('init', {
                 ortScriptUrl: getOnnxOrtScriptUrl(),
                 ortDistUrl: getOnnxOrtDistUrl(),
                 ortWasmModuleUrl: getOnnxOrtWasmModuleUrl(),
                 ortWasmBinaryUrl: getOnnxOrtWasmBinaryUrl(),
-                modelPath: ONNX_MODEL_PATH,
+                modelPath: onnxActiveModel.modelPath,
                 modelUrl: artifacts.modelUrl,
                 externalDataUrl: artifacts.externalDataUrl,
-                externalDataPathAliases: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES,
+                externalDataPathAliases: onnxActiveModel.externalDataPathAliases,
                 modelBytes: modelBuffer,
                 externalDataBytes: externalDataBuffer
-            }, [modelBuffer, externalDataBuffer], normalizedLane);
+            }, transferList, normalizedLane);
+        }
+
+        try {
+            let initResult;
+
+            try {
+                initResult = await dispatchWorkerInit(false);
+            } catch (error) {
+                if (!isOnnxProtobufParseFailure(error)) {
+                    throw error;
+                }
+
+                runtimeLog('onnx:init-retry-after-cache-bypass', {
+                    lane: normalizedLane,
+                    modelPath: onnxActiveModel.modelPath,
+                    reason: String(error?.message || error)
+                });
+
+                resetOnnxWorkerState(normalizedLane);
+                initResult = await dispatchWorkerInit(true);
+            }
 
             laneState.initialized = true;
             laneState.selectedProvider = initResult?.provider || 'wasm-worker';
@@ -473,9 +538,9 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
 
             runtimeLog('onnx:init', {
                 lane: normalizedLane,
-                model: ONNX_MODEL_LABEL,
+                model: onnxActiveModel.label,
                 provider: laneState.selectedProvider,
-                modelPath: ONNX_MODEL_PATH,
+                modelPath: onnxActiveModel.modelPath,
                 durationMs: formatOnnxDurationMs(startedAt)
             });
 
@@ -483,8 +548,8 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
         } catch (error) {
             runtimeLog('onnx:init-failed', {
                 lane: normalizedLane,
-                model: ONNX_MODEL_LABEL,
-                modelPath: ONNX_MODEL_PATH,
+                model: onnxActiveModel.label,
+                modelPath: onnxActiveModel.modelPath,
                 durationMs: formatOnnxDurationMs(startedAt),
                 error: serializeOnnxError(error)
             });
@@ -562,7 +627,7 @@ async function writeOnnxCachedArtifact(cacheKey, payload) {
         const store = tx.objectStore(ONNX_CACHE_STORE_NAME);
         store.put({
             cacheKey,
-            schema: ONNX_CACHE_SCHEMA_VERSION,
+            schema: onnxActiveModel.cacheSchemaVersion,
             payload,
             updatedAt: Date.now()
         });
@@ -579,16 +644,24 @@ async function writeOnnxCachedArtifact(cacheKey, payload) {
     });
 }
 
-async function fetchOnnxArtifact(url, artifactKind) {
-    const cacheKey = `${ONNX_CACHE_SCHEMA_VERSION}|${artifactKind}|${url}`;
-    const cached = await readOnnxCachedArtifact(cacheKey);
-    if (cached) {
-        runtimeProfileLog('onnx:artifact-cache-hit', {
+async function fetchOnnxArtifact(url, artifactKind, options = {}) {
+    const forceRefresh = !!options?.forceRefresh;
+    const cacheKey = `${onnxActiveModel.cacheSchemaVersion}|${artifactKind}|${url}`;
+    if (!forceRefresh) {
+        const cached = await readOnnxCachedArtifact(cacheKey);
+        if (cached) {
+            runtimeProfileLog('onnx:artifact-cache-hit', {
+                artifactKind,
+                url,
+                bytes: cached.byteLength
+            });
+            return { bytes: new Uint8Array(cached), cacheHit: true };
+        }
+    } else {
+        runtimeLog('onnx:artifact-cache-bypass', {
             artifactKind,
-            url,
-            bytes: cached.byteLength
+            url
         });
-        return { bytes: new Uint8Array(cached), cacheHit: true };
     }
 
     const response = await fetch(url);
@@ -608,22 +681,24 @@ async function fetchOnnxArtifact(url, artifactKind) {
     return { bytes: new Uint8Array(buffer), cacheHit: false };
 }
 
-async function loadOnnxArtifacts() {
+async function loadOnnxArtifacts(options = {}) {
+    const forceRefresh = !!options?.forceRefresh;
     const modelUrl = getOnnxModelUrl();
     const externalDataUrl = getOnnxExternalDataUrl();
 
-    const [model, externalData] = await Promise.all([
-        fetchOnnxArtifact(modelUrl, 'model'),
-        fetchOnnxArtifact(externalDataUrl, 'externalData')
-    ]);
+    const model = await fetchOnnxArtifact(modelUrl, 'model', { forceRefresh });
+    let externalData = null;
+    if (externalDataUrl) {
+        externalData = await fetchOnnxArtifact(externalDataUrl, 'externalData', { forceRefresh });
+    }
 
     return {
         modelUrl,
         externalDataUrl,
         modelBytes: model.bytes,
-        externalDataBytes: externalData.bytes,
+        externalDataBytes: externalData?.bytes || null,
         modelCacheHit: model.cacheHit,
-        externalDataCacheHit: externalData.cacheHit
+        externalDataCacheHit: externalData?.cacheHit || false
     };
 }
 
@@ -644,7 +719,7 @@ function configureOnnxEnvironment(lib) {
     }
 
     runtimeLog('onnx:env-configured', {
-        modelPath: ONNX_MODEL_PATH,
+        modelPath: onnxActiveModel.modelPath,
         distPath,
         wasm: getOnnxWasmPathDiagnostics(lib),
         hasNavigatorGpu: !!navigator?.gpu,
@@ -667,25 +742,28 @@ async function createOnnxSession() {
     configureOnnxEnvironment(lib);
 
     const artifactsStartAt = getOnnxNow();
-    const artifacts = await loadOnnxArtifacts();
-    const artifactsEndAt = getOnnxNow();
+    let artifacts = await loadOnnxArtifacts();
+    let artifactsEndAt = getOnnxNow();
 
     const sessionOptions = {
         executionProviders: ['webgpu'],
-        graphOptimizationLevel: 'all',
-        externalData: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES.map((path) => ({
+        graphOptimizationLevel: 'all'
+    };
+
+    if (artifacts.externalDataBytes && onnxActiveModel.externalDataPathAliases.length > 0) {
+        sessionOptions.externalData = onnxActiveModel.externalDataPathAliases.map((path) => ({
             path,
             data: artifacts.externalDataBytes
-        }))
-    };
+        }));
+    }
 
     runtimeLog('onnx:session-create-start', {
         providerCandidates: ['webgpu'],
         modelUrl: artifacts.modelUrl,
         externalDataUrl: artifacts.externalDataUrl,
-        externalDataPathAliases: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES,
+        externalDataPathAliases: onnxActiveModel.externalDataPathAliases,
         modelBytes: artifacts.modelBytes.byteLength,
-        externalDataBytes: artifacts.externalDataBytes.byteLength,
+        externalDataBytes: artifacts.externalDataBytes ? artifacts.externalDataBytes.byteLength : 0,
         modelCacheHit: artifacts.modelCacheHit,
         externalDataCacheHit: artifacts.externalDataCacheHit,
         artifactLoadMs: formatOnnxDurationMs(artifactsStartAt, artifactsEndAt)
@@ -700,17 +778,55 @@ async function createOnnxSession() {
             durationMs: formatOnnxDurationMs(startedAt),
             inputNames: Array.isArray(session?.inputNames) ? session.inputNames : [],
             outputNames: Array.isArray(session?.outputNames) ? session.outputNames : [],
-            externalDataPathAliases: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES
+            externalDataPathAliases: onnxActiveModel.externalDataPathAliases
         });
 
         return session;
     } catch (error) {
+        if (isOnnxProtobufParseFailure(error) && !artifacts.forceRefreshed) {
+            runtimeLog('onnx:session-retry-after-cache-bypass', {
+                modelPath: onnxActiveModel.modelPath,
+                reason: String(error?.message || error)
+            });
+
+            artifacts = await loadOnnxArtifacts({ forceRefresh: true });
+            artifacts.forceRefreshed = true;
+            artifactsEndAt = getOnnxNow();
+
+            const retrySessionOptions = {
+                executionProviders: ['webgpu'],
+                graphOptimizationLevel: 'all'
+            };
+
+            if (artifacts.externalDataBytes && onnxActiveModel.externalDataPathAliases.length > 0) {
+                retrySessionOptions.externalData = onnxActiveModel.externalDataPathAliases.map((path) => ({
+                    path,
+                    data: artifacts.externalDataBytes
+                }));
+            }
+
+            const session = await lib.InferenceSession.create(artifacts.modelBytes, retrySessionOptions);
+            onnxSelectedProvider = 'webgpu-main';
+
+            runtimeLog('onnx:session-create-success', {
+                provider: onnxSelectedProvider,
+                durationMs: formatOnnxDurationMs(startedAt),
+                inputNames: Array.isArray(session?.inputNames) ? session.inputNames : [],
+                outputNames: Array.isArray(session?.outputNames) ? session.outputNames : [],
+                externalDataPathAliases: onnxActiveModel.externalDataPathAliases,
+                retriedAfterCacheBypass: true,
+                artifactLoadMs: formatOnnxDurationMs(artifactsStartAt, artifactsEndAt)
+            });
+
+            return session;
+        }
+
         runtimeLog('onnx:session-create-failed', {
             durationMs: formatOnnxDurationMs(startedAt),
             providerCandidates: ['webgpu'],
             modelUrl: artifacts.modelUrl,
             externalDataUrl: artifacts.externalDataUrl,
-            externalDataPathAliases: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES,
+            externalDataPathAliases: onnxActiveModel.externalDataPathAliases,
             error: serializeOnnxError(error)
         });
         throw error;
@@ -727,9 +843,9 @@ async function getOrCreateOnnxSession() {
         onnxInitialized = true;
 
         runtimeLog('onnx:init', {
-            model: ONNX_MODEL_LABEL,
+            model: onnxActiveModel.label,
             provider: onnxSelectedProvider,
-            modelPath: ONNX_MODEL_PATH
+            modelPath: onnxActiveModel.modelPath
         });
 
         return session;
@@ -739,8 +855,8 @@ async function getOrCreateOnnxSession() {
         return await onnxSessionPromise;
     } catch (error) {
         runtimeLog('onnx:init-failed', {
-            model: ONNX_MODEL_LABEL,
-            modelPath: ONNX_MODEL_PATH,
+            model: onnxActiveModel.label,
+            modelPath: onnxActiveModel.modelPath,
             error: serializeOnnxError(error)
         });
         onnxSession = null;
@@ -820,7 +936,7 @@ function getOnnxReusableWorkingCanvas(slot, width = 1, height = 1, lane = ONNX_W
     return canvas;
 }
 
-function alignOnnxDimension(value, alignment = ONNX_MODEL_INPUT_ALIGNMENT) {
+function alignOnnxDimension(value, alignment = onnxActiveModel.inputAlignment) {
     if (!Number.isFinite(value) || value < 1) {
         return 1;
     }
@@ -829,8 +945,15 @@ function alignOnnxDimension(value, alignment = ONNX_MODEL_INPUT_ALIGNMENT) {
 }
 
 function getOnnxInputPadding(width, height) {
-    const paddedWidth = alignOnnxDimension(width);
-    const paddedHeight = alignOnnxDimension(height);
+    let paddedWidth = alignOnnxDimension(width);
+    let paddedHeight = alignOnnxDimension(height);
+
+    if (onnxActiveModel.fixedInputWidth > 0) {
+        paddedWidth = Math.max(paddedWidth, onnxActiveModel.fixedInputWidth);
+    }
+    if (onnxActiveModel.fixedInputHeight > 0) {
+        paddedHeight = Math.max(paddedHeight, onnxActiveModel.fixedInputHeight);
+    }
 
     return {
         paddedWidth,
@@ -881,9 +1004,9 @@ function copyOnnxCanvasRegion(sourceCanvas, destCanvas, width, height) {
 }
 
 function resolveOnnxTileEdgePixels() {
-    const fromPixelBudget = Math.floor(Math.sqrt(ONNX_MAX_FOREGROUND_PIXELS));
-    const overlapLimited = Math.max(ONNX_MIN_TILE_EDGE_PIXELS, fromPixelBudget - ONNX_TILE_OVERLAP_PIXELS * 2);
-    return Math.min(ONNX_MAX_TILE_EDGE_PIXELS, overlapLimited);
+    const fromPixelBudget = Math.floor(Math.sqrt(onnxActiveModel.maxForegroundPixels));
+    const overlapLimited = Math.max(onnxActiveModel.minTileEdgePixels, fromPixelBudget - onnxActiveModel.tileOverlapPixels * 2);
+    return Math.min(onnxActiveModel.maxTileEdgePixels, overlapLimited);
 }
 
 function yieldOnnxTileLoop() {
@@ -1339,7 +1462,7 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
     const preferMainThreadPath = executionLane === ONNX_WORKER_LANE_FOREGROUND;
     let fellBackToWorkerPath = false;
     const tileEdge = resolveOnnxTileEdgePixels();
-    const overlap = ONNX_TILE_OVERLAP_PIXELS;
+    const overlap = onnxActiveModel.tileOverlapPixels;
     const coreStep = Math.max(64, tileEdge - overlap * 2);
     const tileColumns = Math.ceil(sourceWidth / coreStep);
     const tileRows = Math.ceil(sourceHeight / coreStep);
@@ -1558,6 +1681,7 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
 }
 
 async function runOnnxUpscale(tempImg, canvas, runtimeSettings = getRuntimePreferenceSnapshot(), executionOptions = {}) {
+    applyOnnxModelSelection(runtimeSettings);
     const executionLane = normalizeOnnxExecutionLane(executionOptions?.lane);
     const laneState = getOnnxWorkerLaneState(executionLane);
     await backendReadyPromise;
@@ -1578,12 +1702,17 @@ async function runOnnxUpscale(tempImg, canvas, runtimeSettings = getRuntimePrefe
         await ensureOnnxWorkerReady(executionLane);
         let runMeta;
 
-        if (pixelCount > ONNX_MAX_SINGLE_PASS_PIXELS) {
+        const useTiledPath =
+            pixelCount > onnxActiveModel.maxSinglePassPixels ||
+            (onnxActiveModel.fixedInputWidth > 0 && sourceWidth > onnxActiveModel.fixedInputWidth) ||
+            (onnxActiveModel.fixedInputHeight > 0 && sourceHeight > onnxActiveModel.fixedInputHeight);
+
+        if (useTiledPath) {
             runtimeLog('onnx:run-tiled-start', {
                 sourceWidth,
                 sourceHeight,
                 pixelCount,
-                threshold: ONNX_MAX_SINGLE_PASS_PIXELS
+                threshold: onnxActiveModel.maxSinglePassPixels
             });
             runMeta = await runOnnxUpscaleTiled(tempImg, canvas, sourceWidth, sourceHeight, executionOptions);
         } else {
@@ -1605,7 +1734,7 @@ async function runOnnxUpscale(tempImg, canvas, runtimeSettings = getRuntimePrefe
         });
 
         return {
-            model: ONNX_MODEL_LABEL,
+            model: onnxActiveModel.label,
             runMode: laneState.selectedProvider || onnxSelectedProvider || 'onnx'
         };
     } catch (error) {
@@ -1621,11 +1750,12 @@ async function runOnnxUpscale(tempImg, canvas, runtimeSettings = getRuntimePrefe
     }
 }
 
-async function prewarmOnnx() {
+async function prewarmOnnx(runtimeSettings = getRuntimePreferenceSnapshot()) {
+    applyOnnxModelSelection(runtimeSettings);
     const startedAt = getOnnxNow();
     runtimeLog('onnx:prewarm-start', {
-        model: ONNX_MODEL_LABEL,
-        modelPath: ONNX_MODEL_PATH,
+        model: onnxActiveModel.label,
+        modelPath: onnxActiveModel.modelPath,
         mode: 'worker-init-non-blocking'
     });
 

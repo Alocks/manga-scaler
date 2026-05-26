@@ -4,25 +4,35 @@ const SIMPLE_PRESET_KEY = 'simplePreset';
 const ENGINE_BACKEND_KEY = 'engineBackend';
 const WEBGPU_MODEL_KEY = 'webgpuModel';
 const WEBGPU_SCALE_KEY = 'webgpuScale';
+const ONNX_MODEL_KEY = 'onnxModel';
 const DEFAULT_SIMPLE_PRESET = 'M';
 const DEFAULT_ENGINE_BACKEND = 'webgl';
 const DEFAULT_WEBGPU_MODEL = 'ModeA';
 const DEFAULT_WEBGPU_SCALE = 2;
+const DEFAULT_ONNX_MODEL = 'realesrgan-2xplus';
 const SIMPLE_PRESET_VALUES = new Set(['S', 'M', 'L', 'UL', 'VL']);
 const ENGINE_BACKEND_VALUES = new Set(['off', 'webgl', 'webgpu', 'onnx']);
 const WEBGPU_MODEL_VALUES = new Set([
     'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'
 ]);
 const WEBGPU_SCALE_VALUES = new Set([2, 3, 4]);
+const ONNX_MODEL_VALUES = new Set([
+    'realesrgan-2xplus',
+    'realesr-general-x4v3',
+    'up2x-latest-conservative',
+    'up2x-latest-denoise1x'
+]);
 
 let selectedSimplePreset = DEFAULT_SIMPLE_PRESET;
 let selectedEngineBackend = DEFAULT_ENGINE_BACKEND;
 let selectedWebGpuModel = DEFAULT_WEBGPU_MODEL;
 let selectedWebGpuScale = DEFAULT_WEBGPU_SCALE;
+let selectedOnnxModel = DEFAULT_ONNX_MODEL;
 let presetReadyPromise = Promise.resolve();
 let backendReadyPromise = Promise.resolve();
 let webgpuModelReadyPromise = Promise.resolve();
 let webgpuScaleReadyPromise = Promise.resolve();
+let onnxModelReadyPromise = Promise.resolve();
 let backendPreferenceLoaded = false;
 
 function runtimeLog(label, data = {}) {
@@ -65,12 +75,18 @@ function normalizeWebGpuScale(value) {
     return WEBGPU_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_WEBGPU_SCALE;
 }
 
+function normalizeOnnxModel(value) {
+    const normalized = String(value || '').trim();
+    return ONNX_MODEL_VALUES.has(normalized) ? normalized : DEFAULT_ONNX_MODEL;
+}
+
 function getRuntimePreferenceSnapshot() {
     return {
         selectedSimplePreset,
         selectedEngineBackend,
         selectedWebGpuModel,
-        selectedWebGpuScale
+        selectedWebGpuScale,
+        selectedOnnxModel
     };
 }
 
@@ -80,7 +96,8 @@ function getNormalizedRuntimePreferenceSnapshot(snapshot) {
         selectedSimplePreset: normalizeSimplePreset(source.selectedSimplePreset),
         selectedEngineBackend: normalizeEngineBackend(source.selectedEngineBackend),
         selectedWebGpuModel: normalizeWebGpuModel(source.selectedWebGpuModel),
-        selectedWebGpuScale: normalizeWebGpuScale(source.selectedWebGpuScale)
+        selectedWebGpuScale: normalizeWebGpuScale(source.selectedWebGpuScale),
+        selectedOnnxModel: normalizeOnnxModel(source.selectedOnnxModel)
     };
 }
 
@@ -89,7 +106,8 @@ function applyRuntimePreferenceStorageChanges(changes) {
     const hasBackendChange = !!changes[ENGINE_BACKEND_KEY];
     const hasWebGpuModelChange = !!changes[WEBGPU_MODEL_KEY];
     const hasWebGpuScaleChange = !!changes[WEBGPU_SCALE_KEY];
-    if (!hasPresetChange && !hasBackendChange && !hasWebGpuModelChange && !hasWebGpuScaleChange) {
+    const hasOnnxModelChange = !!changes[ONNX_MODEL_KEY];
+    if (!hasPresetChange && !hasBackendChange && !hasWebGpuModelChange && !hasWebGpuScaleChange && !hasOnnxModelChange) {
         return false;
     }
 
@@ -123,6 +141,14 @@ function applyRuntimePreferenceStorageChanges(changes) {
         const nextWebGpuScale = normalizeWebGpuScale(changes[WEBGPU_SCALE_KEY].newValue);
         if (nextWebGpuScale !== selectedWebGpuScale) {
             selectedWebGpuScale = nextWebGpuScale;
+            didChange = true;
+        }
+    }
+
+    if (hasOnnxModelChange) {
+        const nextOnnxModel = normalizeOnnxModel(changes[ONNX_MODEL_KEY].newValue);
+        if (nextOnnxModel !== selectedOnnxModel) {
+            selectedOnnxModel = nextOnnxModel;
             didChange = true;
         }
     }
@@ -187,7 +213,22 @@ function loadWebGpuScalePreference() {
     });
 }
 
+function loadOnnxModelPreference() {
+    if (!chrome?.storage?.sync) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+        chrome.storage.sync.get({ [ONNX_MODEL_KEY]: DEFAULT_ONNX_MODEL }, (result) => {
+            selectedOnnxModel = normalizeOnnxModel(result?.[ONNX_MODEL_KEY]);
+            runtimeLog('onnx-model:loaded', { selectedOnnxModel });
+            resolve();
+        });
+    });
+}
+
 presetReadyPromise = loadSimplePresetPreference();
 backendReadyPromise = loadEngineBackendPreference();
 webgpuModelReadyPromise = loadWebGpuModelPreference();
 webgpuScaleReadyPromise = loadWebGpuScalePreference();
+onnxModelReadyPromise = loadOnnxModelPreference();

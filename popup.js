@@ -2,11 +2,17 @@ const SIMPLE_PRESET_KEY = 'simplePreset';
 const ENGINE_BACKEND_KEY = 'engineBackend';
 const WEBGPU_MODEL_KEY = 'webgpuModel';
 const WEBGPU_SCALE_KEY = 'webgpuScale';
+const ONNX_MODEL_KEY = 'onnxModel';
 
 const DEFAULT_SIMPLE_PRESET = 'M';
 const DEFAULT_ENGINE_BACKEND = 'webgl';
 const DEFAULT_WEBGPU_MODEL = 'ModeA';
 const DEFAULT_WEBGPU_SCALE = 2;
+const DEFAULT_ONNX_MODEL = 'realesrgan-2xplus';
+const FALLBACK_ONNX_MODEL_OPTIONS = [
+  { key: 'realesrgan-2xplus', title: 'RealESRGAN 2x+' },
+  { key: 'realesr-general-x4v3', title: 'RealESR General x4 v3' }
+];
 const CLEAR_CACHE_MESSAGE_TYPE = 'manga-scaler:clear-cache';
 const GET_DIAGNOSTICS_MESSAGE_TYPE = 'manga-scaler:get-diagnostics';
 const SUPPORTED_TAB_URL_PATTERNS = [
@@ -23,6 +29,46 @@ const clearCacheButton = document.getElementById('clearCacheButton');
 const cacheActionStatus = document.getElementById('cacheActionStatus');
 const runtimeDiagnostics = document.getElementById('runtimeDiagnostics');
 const webgpuScaleSelect = document.getElementById('webgpuScale');
+const onnxModelSelect = document.getElementById('onnxModel');
+
+function getPopupOnnxModelOptions() {
+  if (typeof globalThis.getOnnxModelOptions === 'function') {
+    const options = globalThis.getOnnxModelOptions();
+    if (Array.isArray(options) && options.length > 0) {
+      return options;
+    }
+  }
+  return FALLBACK_ONNX_MODEL_OPTIONS;
+}
+
+function normalizeOnnxModel(value) {
+  const raw = String(value || '').trim();
+  if (typeof globalThis.normalizeOnnxModelKey === 'function') {
+    return globalThis.normalizeOnnxModelKey(raw);
+  }
+
+  const options = getPopupOnnxModelOptions();
+  return options.some((option) => option.key === raw) ? raw : DEFAULT_ONNX_MODEL;
+}
+
+function buildOnnxModelSelectOptions(selectedValue = DEFAULT_ONNX_MODEL) {
+  if (!onnxModelSelect) return;
+
+  const normalizedSelected = normalizeOnnxModel(selectedValue);
+  const options = getPopupOnnxModelOptions();
+
+  onnxModelSelect.textContent = '';
+
+  for (const option of options) {
+    if (!option?.key) continue;
+    const element = document.createElement('option');
+    element.value = option.key;
+    element.textContent = option.title || option.label || option.key;
+    onnxModelSelect.appendChild(element);
+  }
+
+  onnxModelSelect.value = normalizedSelected;
+}
 
 function normalizeWebGpuScale(value) {
   const scale = Number(value);
@@ -106,6 +152,7 @@ function formatRuntimeDiagnostics(diagnostics) {
     `Page: ${pageUrl}`,
     `Backend: ${prefs.selectedEngineBackend || 'unknown'} (effective: ${diagnostics.effectiveBackend || 'unknown'})`,
     `Preset: ${prefs.selectedSimplePreset || 'unknown'} | WebGPU model: ${prefs.selectedWebGpuModel || 'unknown'} | WebGPU scale: ${prefs.selectedWebGpuScale || DEFAULT_WEBGPU_SCALE}x`,
+    `ONNX model: ${prefs.selectedOnnxModel || DEFAULT_ONNX_MODEL}`,
     `Route: ${diagnostics.readerRoute ? 'reader' : 'non-reader'} | Foreground: ${diagnostics.foreground ? 'yes' : 'no'}`,
     `Hooks - fetch: ${hooks.fetch ? 'ok' : 'missing'}, image-src: ${hooks.imageSrc ? 'ok' : 'missing'}, Image(): ${hooks.imageConstructor ? 'ok' : 'missing'}`,
     `Adapters - WebGL: capable=${adapters.webgl?.capable ? 'yes' : 'no'}, initialized=${adapters.webgl?.initialized ? 'yes' : 'no'}, supported=${adapters.webgl?.isSupported ? 'yes' : 'no'}`,
@@ -216,13 +263,15 @@ async function loadCurrentSettings() {
     [SIMPLE_PRESET_KEY]: DEFAULT_SIMPLE_PRESET,
     [ENGINE_BACKEND_KEY]: DEFAULT_ENGINE_BACKEND,
     [WEBGPU_MODEL_KEY]: DEFAULT_WEBGPU_MODEL,
-    [WEBGPU_SCALE_KEY]: DEFAULT_WEBGPU_SCALE
+    [WEBGPU_SCALE_KEY]: DEFAULT_WEBGPU_SCALE,
+    [ONNX_MODEL_KEY]: DEFAULT_ONNX_MODEL
   });
 
   const currentPreset = String(result[SIMPLE_PRESET_KEY] || DEFAULT_SIMPLE_PRESET).toUpperCase();
   let currentBackend = String(result[ENGINE_BACKEND_KEY] || DEFAULT_ENGINE_BACKEND).toLowerCase();
   const currentWebGpuModel = String(result[WEBGPU_MODEL_KEY] || DEFAULT_WEBGPU_MODEL);
   const currentWebGpuScale = normalizeWebGpuScale(result[WEBGPU_SCALE_KEY]);
+  const currentOnnxModel = normalizeOnnxModel(result[ONNX_MODEL_KEY]);
 
   if (!isWebGpuSupported && currentBackend === 'webgpu') {
     currentBackend = 'webgl';
@@ -238,6 +287,8 @@ async function loadCurrentSettings() {
   if (webgpuScaleSelect) {
     webgpuScaleSelect.value = String(currentWebGpuScale);
   }
+
+  buildOnnxModelSelectOptions(currentOnnxModel);
 
   applyWebGpuAvailabilityUi(isWebGpuSupported);
   setActiveEnginePanel(currentBackend);
@@ -278,14 +329,26 @@ if (webgpuScaleSelect) {
   });
 }
 
+if (onnxModelSelect) {
+  onnxModelSelect.addEventListener('change', async (event) => {
+    const nextModel = normalizeOnnxModel(event.target?.value);
+    onnxModelSelect.value = nextModel;
+    await persistSettingAndRefresh({ [ONNX_MODEL_KEY]: nextModel });
+  });
+}
+
 if (chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync') return;
+    if (changes[ONNX_MODEL_KEY] && onnxModelSelect) {
+      onnxModelSelect.value = normalizeOnnxModel(changes[ONNX_MODEL_KEY].newValue);
+    }
     if (
       changes[SIMPLE_PRESET_KEY] ||
       changes[ENGINE_BACKEND_KEY] ||
       changes[WEBGPU_MODEL_KEY] ||
-      changes[WEBGPU_SCALE_KEY]
+      changes[WEBGPU_SCALE_KEY] ||
+      changes[ONNX_MODEL_KEY]
     ) {
       scheduleRuntimeDiagnosticsRefresh();
     }

@@ -351,8 +351,12 @@
 
     <div id="enginePanel-onnx" class="engine-panel">
       <div class="panel-note">ONNX Runtime backend with RealESRGAN 2x model.</div>
+      <div class="field-row">
+        <label class="field-label" for="onnxModel">Model</label>
+        <select id="onnxModel" class="field-select" name="onnxModel"></select>
+      </div>
       <div class="status">
-        Uses onnxruntime-web and models/realesrgan_2xplus.onnx
+        Uses onnxruntime-web; changing model resets ONNX runtime state.
       </div>
     </div>
     <div class="cache-actions">
@@ -366,6 +370,7 @@
   </div>
   
   
+  <script src="src/runtime/engines/onnx-models.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
