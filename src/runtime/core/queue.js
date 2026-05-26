@@ -292,7 +292,9 @@ async function processBackgroundQueue() {
 
             const bgCanvas = document.createElement('canvas');
             const t3 = performance.now();
-            const runInfo = await upscaleWithSelectedBackend(tempImg, bgCanvas, itemRuntimeSettings);
+            const runInfo = await upscaleWithSelectedBackend(tempImg, bgCanvas, itemRuntimeSettings, {
+                lane: 'background'
+            });
             const t4 = performance.now();
             log('bg-process:upscale-time', {
                 sourceUrl,

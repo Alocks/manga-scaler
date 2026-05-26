@@ -13,6 +13,7 @@ const CLEAR_CACHE_MESSAGE_TYPE = 'manga-scaler:clear-cache';
 const GET_DIAGNOSTICS_MESSAGE_TYPE = 'manga-scaler:get-diagnostics';
 let runtimeMutationSuppressed = false;
 let runtimeSettingsFlushTimeoutId = null;
+const onnxForegroundSourceLocks = new Set();
 
 const log = runtimeLog;
 
@@ -324,16 +325,26 @@ async function processCurrentImage(container) {
 
     if (img.dataset.aiProcessingSrc === sourceUrl) return;
 
+    const effectiveBackend = getEffectiveBackend(runtimeSettings);
+    const shouldSerializeOnnxSource = effectiveBackend === 'onnx';
+    if (shouldSerializeOnnxSource && onnxForegroundSourceLocks.has(sourceUrl)) {
+        log('process:skip-inflight-onnx', { sourceUrl, page: getSourcePageNumber(sourceUrl) });
+        return;
+    }
+
     const jobId = String(++jobCounter);
     img.dataset.aiJobId = jobId;
     img.dataset.aiProcessingSrc = sourceUrl;
     delete img.dataset.aiSkipSource;
     img.dataset.aiProcessed = 'true';
+    if (shouldSerializeOnnxSource) {
+        onnxForegroundSourceLocks.add(sourceUrl);
+    }
     const page = getSourcePageNumber(sourceUrl);
     if (page == null) {
         log('process:page-missing', { sourceUrl, pageKey: getSourcePageKey(sourceUrl), jobId });
     }
-    log('process:start', { sourceUrl, page, jobId, backend: getEffectiveBackend(runtimeSettings) });
+    log('process:start', { sourceUrl, page, jobId, backend: effectiveBackend });
 
     const canvas = document.createElement('canvas');
     canvas.width = 0;
@@ -427,6 +438,10 @@ async function processCurrentImage(container) {
         restoreOriginalImage(img);
         log('process:error', { sourceUrl, page, jobId, error: String(err) });
         console.error('Anime4K processing failed:', err);
+    } finally {
+        if (shouldSerializeOnnxSource) {
+            onnxForegroundSourceLocks.delete(sourceUrl);
+        }
     }
 }
 

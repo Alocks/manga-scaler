@@ -9,7 +9,7 @@ const DEFAULT_ENGINE_BACKEND = 'webgl';
 const DEFAULT_WEBGPU_MODEL = 'ModeA';
 const DEFAULT_WEBGPU_SCALE = 2;
 const SIMPLE_PRESET_VALUES = new Set(['S', 'M', 'L', 'UL', 'VL']);
-const ENGINE_BACKEND_VALUES = new Set(['off', 'webgl', 'webgpu']);
+const ENGINE_BACKEND_VALUES = new Set(['off', 'webgl', 'webgpu', 'onnx']);
 const WEBGPU_MODEL_VALUES = new Set([
     'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'
 ]);
@@ -28,6 +28,9 @@ let backendPreferenceLoaded = false;
 function runtimeLog(label, data = {}) {
     if (typeof window.MangaScalerLog === 'function') {
         window.MangaScalerLog(label, data);
+        return;
+    }
+    if (!window.MangaScalerDebugEnabled) {
         return;
     }
     console.log('[Manga Scaler]', label, { ts: new Date().toISOString(), ...data });

@@ -110,6 +110,7 @@ function formatRuntimeDiagnostics(diagnostics) {
     `Hooks - fetch: ${hooks.fetch ? 'ok' : 'missing'}, image-src: ${hooks.imageSrc ? 'ok' : 'missing'}, Image(): ${hooks.imageConstructor ? 'ok' : 'missing'}`,
     `Adapters - WebGL: capable=${adapters.webgl?.capable ? 'yes' : 'no'}, initialized=${adapters.webgl?.initialized ? 'yes' : 'no'}, supported=${adapters.webgl?.isSupported ? 'yes' : 'no'}`,
     `Adapters - WebGPU: capable=${adapters.webgpu?.capable ? 'yes' : 'no'}, initialized=${adapters.webgpu?.initialized ? 'yes' : 'no'}, supported=${adapters.webgpu?.isSupported ? 'yes' : 'no'}`,
+    `Adapters - ONNX: capable=${adapters.onnx?.capable ? 'yes' : 'no'}, initialized=${adapters.onnx?.initialized ? 'yes' : 'no'}, supported=${adapters.onnx?.isSupported ? 'yes' : 'no'}`,
     `Queue - size: ${queue.size ?? 0}, in-flight: ${queue.inFlightCount ?? 0}, processed: ${queue.processedCount ?? 0}`
   ].join('\n');
 }

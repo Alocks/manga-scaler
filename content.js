@@ -14,6 +14,7 @@ function bootstrapLog(label, data = {}) {
     console.log('[Manga Scaler]', label, { ts: new Date().toISOString(), ...data });
 }
 
+window.MangaScalerDebugEnabled = DEBUG;
 window.MangaScalerLog = bootstrapLog;
 window.MangaScalerProfiling = {
     enabled: ENABLE_WEBGPU_PROFILING,

@@ -27,6 +27,7 @@ const runtimeModelFactoryFiles = [
 
 const engineAdapterFiles = [
   'src/runtime/engines/base_engine.js',
+  'src/runtime/engines/onnxruntime.js',
   'src/runtime/engines/webgl.js',
   'src/runtime/engines/webgpu.js'
 ];

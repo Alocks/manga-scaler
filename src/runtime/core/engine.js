@@ -43,6 +43,10 @@ function tryGetValidatedAdapter(adapterName) {
 function getEffectiveBackend(runtimeSettings = getRuntimePreferenceSnapshot()) {
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
     if (settings.selectedEngineBackend === 'off') return 'off';
+    const onnxAdapter = tryGetValidatedAdapter('OnnxRuntimeAdapter');
+    if (settings.selectedEngineBackend === 'onnx' && onnxAdapter && onnxAdapter.isSupported()) {
+        return 'onnx';
+    }
     const webGpuAdapter = tryGetValidatedAdapter('WebGPUAdapter');
     if (settings.selectedEngineBackend === 'webgpu' && webGpuAdapter && webGpuAdapter.isSupported()) {
         return 'webgpu';
@@ -50,9 +54,21 @@ function getEffectiveBackend(runtimeSettings = getRuntimePreferenceSnapshot()) {
     return 'webgl';
 }
 
-async function upscaleWithSelectedBackend(tempImg, canvas, runtimeSettings = getRuntimePreferenceSnapshot()) {
+async function upscaleWithSelectedBackend(tempImg, canvas, runtimeSettings = getRuntimePreferenceSnapshot(), executionOptions = {}) {
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
     const backend = getEffectiveBackend(settings);
+    if (backend === 'onnx') {
+        try {
+            const onnxAdapter = getValidatedAdapter('OnnxRuntimeAdapter');
+            const result = await onnxAdapter.upscale(tempImg, canvas, settings, executionOptions);
+            const normalized = normalizeUpscaleResult(result);
+            return { backend: 'onnx', model: normalized.model, runMode: normalized.runMode };
+        } catch (err) {
+            runtimeLog('onnx:upscale-error', { error: String(err) });
+            throw err;
+        }
+    }
+
     if (backend === 'webgpu') {
         try {
             const webGpuAdapter = getValidatedAdapter('WebGPUAdapter');
@@ -74,6 +90,11 @@ async function prewarmSelectedBackend() {
     const settings = getRuntimePreferenceSnapshot();
     const backend = getEffectiveBackend(settings);
     if (backend === 'off') return;
+    if (backend === 'onnx') {
+        const onnxAdapter = getValidatedAdapter('OnnxRuntimeAdapter');
+        await onnxAdapter.prewarm(settings);
+        return;
+    }
     if (backend === 'webgpu') {
         const webGpuAdapter = getValidatedAdapter('WebGPUAdapter');
         await webGpuAdapter.prewarm(settings);
@@ -84,6 +105,11 @@ async function prewarmSelectedBackend() {
 }
 
 function resetBackendRuntimeState() {
+    const onnxAdapter = tryGetValidatedAdapter('OnnxRuntimeAdapter');
+    if (onnxAdapter) {
+        onnxAdapter.reset();
+    }
+
     const webGlAdapter = tryGetValidatedAdapter('WebGLAdapter');
     if (webGlAdapter) {
         webGlAdapter.reset();
