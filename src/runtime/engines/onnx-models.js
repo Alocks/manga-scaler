@@ -61,7 +61,7 @@ const REALESRGAN_GENEREAL_X4_V3_ONNX_MODEL = {
 
 const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
     key: 'up2x-latest-conservative',
-    title: 'RealCUGAN Latest Conservative',
+    title: 'RealCUGAN Conservative',
     label: 'UP2X_LATEST_CONSERVATIVE_ONNX',
     modelPath: 'models/up2x-latest-conservative.onnx',
     externalDataPath: 'models/up2x-latest-conservative.onnx.data',
@@ -84,7 +84,7 @@ const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
 
 const UP2X_LATEST_DENOISE1X_ONNX_MODEL = {
     key: 'up2x-latest-denoise1x',
-    title: 'RealCUGAN 2X Latest Denoise 1x',
+    title: 'RealCUGAN 2X Denoise 1x',
     label: 'UP2X_LATEST_DENOISE1X_ONNX',
     modelPath: 'models/up2x-latest-denoise1x.onnx',
     externalDataPath: 'models/up2x-latest-denoise1x.onnx.data',
