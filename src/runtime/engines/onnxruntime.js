@@ -9,9 +9,13 @@ let onnxSelectedProvider = null;
 let onnxPreprocessCanvas = null;
 let onnxPreprocessContext = null;
 let onnxBackgroundWarmupPromise = null;
-const ONNX_WORKER_PENDING_WARNING_MS = 5000;
 const ONNX_WORKER_LANE_FOREGROUND = 'foreground';
 const ONNX_WORKER_LANE_BACKGROUND = 'background';
+let onnxWorkingCanvasPool = {
+    [ONNX_WORKER_LANE_FOREGROUND]: Object.create(null),
+    [ONNX_WORKER_LANE_BACKGROUND]: Object.create(null)
+};
+const ONNX_WORKER_PENDING_WARNING_MS = 5000;
 
 function createOnnxWorkerLaneState() {
     return {
@@ -45,7 +49,7 @@ const ONNX_MAX_FOREGROUND_PIXELS = 1600000;
 const ONNX_MAX_SINGLE_PASS_PIXELS = 900000;
 const ONNX_TILE_OVERLAP_PIXELS = 16;
 const ONNX_MIN_TILE_EDGE_PIXELS = 128;
-const ONNX_MAX_TILE_EDGE_PIXELS = 1024;
+const ONNX_MAX_TILE_EDGE_PIXELS = 512;
 const ONNX_TILE_YIELD_MS = 0;
 const ONNX_MODEL_INPUT_ALIGNMENT = 2;
 let onnxCacheDbPromise = null;
@@ -159,6 +163,15 @@ function getOnnxOrtWasmBinaryUrl() {
 }
 
 function toTransferableArrayBuffer(typedArray) {
+    if (!typedArray || !typedArray.buffer) {
+        throw new Error('Expected a typed array with an ArrayBuffer for transferable conversion');
+    }
+
+    // Avoid a full copy when the typed array already spans the whole underlying buffer.
+    if (typedArray.byteOffset === 0 && typedArray.byteLength === typedArray.buffer.byteLength) {
+        return typedArray.buffer;
+    }
+
     return typedArray.buffer.slice(typedArray.byteOffset, typedArray.byteOffset + typedArray.byteLength);
 }
 
@@ -569,8 +582,9 @@ async function createOnnxSession() {
     const artifactsEndAt = getOnnxNow();
 
     const sessionOptions = {
-        executionProviders: ['wasm'],
+        executionProviders: ['webgpu'],
         graphOptimizationLevel: 'all',
+        preferredOutputLocation: 'gpu-buffer',
         externalData: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES.map((path) => ({
             path,
             data: artifacts.externalDataBytes
@@ -693,6 +707,31 @@ function createOnnxWorkingCanvas(width = 1, height = 1) {
     return elementCanvas;
 }
 
+function getOnnxReusableWorkingCanvas(slot, width = 1, height = 1, lane = ONNX_WORKER_LANE_FOREGROUND) {
+    const normalizedLane = normalizeOnnxExecutionLane(lane);
+
+    if (!onnxWorkingCanvasPool[normalizedLane]) {
+        onnxWorkingCanvasPool[normalizedLane] = Object.create(null);
+    }
+
+    const lanePool = onnxWorkingCanvasPool[normalizedLane];
+    let canvas = lanePool[slot];
+
+    if (!canvas) {
+        canvas = createOnnxWorkingCanvas(width, height);
+        lanePool[slot] = canvas;
+    }
+
+    if (canvas.width !== width) {
+        canvas.width = width;
+    }
+    if (canvas.height !== height) {
+        canvas.height = height;
+    }
+
+    return canvas;
+}
+
 function alignOnnxDimension(value, alignment = ONNX_MODEL_INPUT_ALIGNMENT) {
     if (!Number.isFinite(value) || value < 1) {
         return 1;
@@ -781,7 +820,7 @@ function imageToOnnxWorkerInput(image) {
     return {
         width,
         height,
-        rgbaBuffer: imageData.data.buffer.slice(0)
+        rgbaBuffer: toTransferableArrayBuffer(imageData.data)
     };
 }
 
@@ -810,124 +849,6 @@ function drawOnnxWorkerOutputToCanvas(workerResult, canvas) {
     ctx.putImageData(imageData, 0, 0);
 }
 
-function imageToOnnxTensor(image) {
-    const width = image.naturalWidth || image.width;
-    const height = image.naturalHeight || image.height;
-
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-        throw new Error('Invalid source image dimensions for ONNX Runtime');
-    }
-
-    const ctx = getOnnxPreprocessContext(width, height);
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(image, 0, 0, width, height);
-
-    const rgba = ctx.getImageData(0, 0, width, height).data;
-    const pixelCount = width * height;
-    const chw = new Float32Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        const srcOffset = i * 4;
-        chw[i] = rgba[srcOffset] / 255;
-        chw[pixelCount + i] = rgba[srcOffset + 1] / 255;
-        chw[pixelCount * 2 + i] = rgba[srcOffset + 2] / 255;
-    }
-
-    const lib = getOnnxLibrary();
-    const tensor = new lib.Tensor('float32', chw, [1, 3, height, width]);
-    runtimeProfileLog('onnx:input-tensor', {
-        width,
-        height,
-        dims: tensor.dims,
-        dataType: tensor.type,
-        dataLength: tensor.data?.length || 0
-    });
-    return tensor;
-}
-
-function resolveOutputTensor(runResult, outputNames = []) {
-    if (!runResult || typeof runResult !== 'object') {
-        throw new Error('ONNX Runtime returned an invalid inference result');
-    }
-
-    if (outputNames.length > 0 && runResult[outputNames[0]]) {
-        return runResult[outputNames[0]];
-    }
-
-    const firstTensor = Object.values(runResult)[0];
-    if (!firstTensor) {
-        throw new Error('ONNX Runtime did not return any output tensors');
-    }
-
-    return firstTensor;
-}
-
-function inferOutputScale(data) {
-    const sampleCount = Math.min(2048, data.length);
-    let maxValue = 0;
-    for (let i = 0; i < sampleCount; i++) {
-        const value = data[i];
-        if (value > maxValue) {
-            maxValue = value;
-        }
-    }
-    return maxValue <= 1.5 ? 255 : 1;
-}
-
-function onnxTensorToCanvas(outputTensor, canvas) {
-    if (!outputTensor || !Array.isArray(outputTensor.dims) || outputTensor.dims.length !== 4) {
-        throw new Error('Unexpected ONNX output tensor shape. Expected rank-4 [N,C,H,W]');
-    }
-
-    const [batch, channels, outHeight, outWidth] = outputTensor.dims;
-    if (!Number.isFinite(batch) || batch < 1 || channels < 3 || outHeight < 1 || outWidth < 1) {
-        throw new Error(`Invalid ONNX output tensor dims: ${JSON.stringify(outputTensor.dims)}`);
-    }
-
-    const data = outputTensor.data;
-    if (!data || typeof data.length !== 'number') {
-        throw new Error('ONNX output tensor has no readable data buffer');
-    }
-
-    const pixelCount = outWidth * outHeight;
-    const channelStride = pixelCount;
-    const batchStride = channels * channelStride;
-    const base = 0 * batchStride;
-
-    const rgba = new Uint8ClampedArray(pixelCount * 4);
-    const valueScale = inferOutputScale(data);
-
-    runtimeProfileLog('onnx:output-tensor', {
-        dims: outputTensor.dims,
-        dataType: outputTensor.type || null,
-        dataLength: data.length,
-        valueScale
-    });
-
-    for (let i = 0; i < pixelCount; i++) {
-        const r = data[base + i] * valueScale;
-        const g = data[base + channelStride + i] * valueScale;
-        const b = data[base + channelStride * 2 + i] * valueScale;
-
-        const dst = i * 4;
-        rgba[dst] = Math.max(0, Math.min(255, Math.round(r)));
-        rgba[dst + 1] = Math.max(0, Math.min(255, Math.round(g)));
-        rgba[dst + 2] = Math.max(0, Math.min(255, Math.round(b)));
-        rgba[dst + 3] = 255;
-    }
-
-    canvas.width = outWidth;
-    canvas.height = outHeight;
-
-    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-    if (!ctx) {
-        throw new Error('Failed to acquire output canvas context for ONNX Runtime');
-    }
-
-    const imageData = new ImageData(rgba, outWidth, outHeight);
-    ctx.putImageData(imageData, 0, 0);
-}
-
 async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions = {}) {
     const executionLane = normalizeOnnxExecutionLane(executionOptions?.lane);
     const laneState = getOnnxWorkerLaneState(executionLane);
@@ -949,7 +870,12 @@ async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions =
     if (needsInputPadding) {
         workerSourceImage = drawOnnxImageWithEdgePadding(
             inputImage,
-            createOnnxWorkingCanvas(inputPadding.paddedWidth, inputPadding.paddedHeight),
+            getOnnxReusableWorkingCanvas(
+                'padded-input',
+                inputPadding.paddedWidth,
+                inputPadding.paddedHeight,
+                executionLane
+            ),
             inputWidth,
             inputHeight,
             inputPadding.paddedWidth,
@@ -996,7 +922,12 @@ async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions =
 
     const canvasWriteStartAt = getOnnxNow();
     if (needsInputPadding) {
-        const paddedOutputCanvas = createOnnxWorkingCanvas(1, 1);
+        const paddedOutputCanvas = getOnnxReusableWorkingCanvas(
+            'padded-output',
+            Math.max(1, workerResult.outputWidth || 1),
+            Math.max(1, workerResult.outputHeight || 1),
+            executionLane
+        );
         drawOnnxWorkerOutputToCanvas(workerResult, paddedOutputCanvas);
 
         const scaleX = workerResult.outputWidth / workerInput.width;
@@ -1347,6 +1278,10 @@ function resetOnnxAdapterState() {
     onnxSelectedProvider = null;
     onnxPreprocessCanvas = null;
     onnxPreprocessContext = null;
+    onnxWorkingCanvasPool = {
+        [ONNX_WORKER_LANE_FOREGROUND]: Object.create(null),
+        [ONNX_WORKER_LANE_BACKGROUND]: Object.create(null)
+    };
 }
 
 function isOnnxRuntimeSupported() {

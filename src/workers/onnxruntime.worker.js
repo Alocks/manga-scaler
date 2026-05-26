@@ -95,12 +95,27 @@ function inferWorkerOutputScale(data) {
     return maxValue <= 1.5 ? 255 : 1;
 }
 
-function imageBufferToTensor(rgbaBuffer, width, height) {
+async function imageBufferToTensor(rgbaBuffer, width, height) {
     if (!(rgbaBuffer instanceof ArrayBuffer)) {
         throw new Error('ONNX worker received an invalid input pixel buffer');
     }
 
-    const rgba = new Uint8ClampedArray(rgbaBuffer);
+    if (typeof workerOrt?.Tensor?.fromImage === 'function') {
+        try {
+            const imageData = new ImageData(new Uint8ClampedArray(rgbaBuffer), width, height);
+            return await workerOrt.Tensor.fromImage(imageData, {
+                tensorLayout: 'NCHW',
+                tensorFormat: 'RGB',
+                dataType: 'float32'
+            });
+        } catch (error) {
+            postWorkerLog('onnx:worker-fromimage-fallback', {
+                reason: String(error)
+            });
+        }
+    }
+
+    const rgba = new Uint8Array(rgbaBuffer);
     const pixelCount = width * height;
     const chw = new Float32Array(pixelCount * 3);
 
@@ -122,6 +137,31 @@ function tensorToImageBuffer(outputTensor) {
     const [batch, channels, outHeight, outWidth] = outputTensor.dims;
     if (!Number.isFinite(batch) || batch < 1 || channels < 3 || outHeight < 1 || outWidth < 1) {
         throw new Error(`Invalid worker ONNX output dims: ${JSON.stringify(outputTensor.dims)}`);
+    }
+
+    if (typeof outputTensor?.toImageData === 'function') {
+        try {
+            const imageData = outputTensor.toImageData({
+                tensorLayout: 'NCHW',
+                format: 'RGB'
+            });
+
+            if (imageData && imageData.data && imageData.width === outWidth && imageData.height === outHeight) {
+                return {
+                    outputWidth: outWidth,
+                    outputHeight: outHeight,
+                    outputDims: outputTensor.dims,
+                    rgbaBuffer: imageData.data.buffer.slice(
+                        imageData.data.byteOffset,
+                        imageData.data.byteOffset + imageData.data.byteLength
+                    )
+                };
+            }
+        } catch (error) {
+            postWorkerLog('onnx:worker-toimagedata-fallback', {
+                reason: String(error)
+            });
+        }
     }
 
     const data = outputTensor.data;
@@ -184,11 +224,6 @@ async function ensureWorkerSession(payload) {
         const sessionOptions = {
             executionProviders: ['webgpu'],
             graphOptimizationLevel: 'all',
-                extra: {
-                    session: {
-                        'session.disable_cpu_ep_fallback': '1'
-                    }
-                },
             externalData: payload.externalDataPathAliases.map((path) => ({
                 path,
                 data: new Uint8Array(payload.externalDataBytes)
@@ -247,7 +282,7 @@ async function runWorkerInference(payload) {
         }
 
         const tensorStartAt = getWorkerNow();
-        const inputTensor = imageBufferToTensor(payload.rgbaBuffer, width, height);
+        const inputTensor = await imageBufferToTensor(payload.rgbaBuffer, width, height);
         const tensorEndAt = getWorkerNow();
 
         postWorkerLog('onnx:worker-pass-inference-start', {
