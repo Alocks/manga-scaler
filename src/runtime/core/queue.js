@@ -396,6 +396,15 @@ async function processBackgroundQueue() {
 
     })();
 
+    // After all background jobs are done, dispose ONNX background worker/session to free VRAM
+    try {
+        if (typeof window.resetOnnxWorkerState === 'function') {
+            window.resetOnnxWorkerState('background');
+        }
+    } catch (err) {
+        log('bg-queue:onnx-dispose-error', { error: String(err) });
+    }
+
     try {
         return await backgroundQueueRunPromise;
     } finally {

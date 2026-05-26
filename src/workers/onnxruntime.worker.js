@@ -9,8 +9,8 @@ let workerRunDrainScheduled = false;
 const workerPendingRuns = [];
 let workerCanUseTensorFromImage = null;
 const WORKER_RUN_WARNING_MS = 5000;
-const WORKER_MAX_BUFFERED_RUNS = 8;
-const WORKER_DYNAMIC_BATCH_SIZE = 2;
+const WORKER_MAX_BUFFERED_RUNS = 2;
+const WORKER_DYNAMIC_BATCH_SIZE = 1;
 const WORKER_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
 
 function getWorkerNow() {
@@ -307,9 +307,16 @@ async function runWorkerInferenceBatch(batchEntries) {
     }
 
     const tensorStartAt = getWorkerNow();
-    const inputTensor = batchSize > 1
+    let inputTensor = batchSize > 1
         ? imageBufferBatchToTensor(batchEntries.map((entry) => entry.payload), width, height)
         : await imageBufferToTensor(headPayload.rgbaBuffer, width, height);
+
+    // Detect if model expects float16 input and convert if needed
+    const inputType = Array.isArray(session.inputTypes) && session.inputTypes[0] ? session.inputTypes[0] : null;
+    if (inputType === 'tensor(float16)' && inputTensor.data && inputTensor.data.constructor === Float32Array) {
+        // Convert Float32Array to Float16Array (Uint16Array bit pattern)
+        inputTensor = new workerOrt.Tensor('float16', float32ToFloat16Array(inputTensor.data), inputTensor.dims);
+    }
     const tensorEndAt = getWorkerNow();
 
     postWorkerLog('onnx:worker-pass-inference-start', {
@@ -445,13 +452,16 @@ async function ensureWorkerSession(payload) {
         };
 
         if (payload.externalDataBytes && Array.isArray(payload.externalDataPathAliases) && payload.externalDataPathAliases.length > 0) {
+            const externalDataView = new Uint8Array(payload.externalDataBytes);
             sessionOptions.externalData = payload.externalDataPathAliases.map((path) => ({
                 path,
-                data: new Uint8Array(payload.externalDataBytes)
+                data: externalDataView
             }));
         }
 
         workerSession = await lib.InferenceSession.create(new Uint8Array(payload.modelBytes), sessionOptions);
+        payload.modelBytes = null;
+        payload.externalDataBytes = null;
         workerProvider = 'webgpu-worker';
 
         postWorkerLog('onnx:worker-init-success', {

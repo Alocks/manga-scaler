@@ -21,13 +21,13 @@ const REALESRGAN_2XPLUS_ONNX_MODEL = {
     key: 'realesrgan-2xplus',
     title: 'RealESRGAN 2x+',
     label: 'REALESRGAN_2XPLUS_ONNX',
-    modelPath: 'models/realesrgan_2xplus.onnx',
-    externalDataPath: 'models/realesrgan_2xplus.onnx.data',
+    modelPath: 'models/RealESRGAN_x2plus.onnx',
+    externalDataPath: 'models/RealESRGAN_x2plus.onnx.data',
     externalDataPathAliases: [
-        'realesrgan_2xplus.onnx.data',
-        'realesrgan_2xplus_dynamic.onnx.data'
+        'RealESRGAN_x2plus.onnx.data',
+        'RealESRGAN_x2plus.onnx.data'
     ],
-    cacheSchemaVersion: 'v1',
+    cacheSchemaVersion: 'v2',
     inputAlignment: 2,
     fixedInputWidth: 0,
     fixedInputHeight: 0,

@@ -17,7 +17,10 @@ let onnxWorkingCanvasPool = {
     [ONNX_WORKER_LANE_BACKGROUND]: Object.create(null)
 };
 const ONNX_WORKER_PENDING_WARNING_MS = 5000;
-const ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS = 4;
+const ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS = 1;
+const ONNX_USE_MAIN_THREAD_TILED_PATH = false;
+const ONNX_INIT_RETRY_BASE_DELAY_MS = 1000;
+const ONNX_INIT_RETRY_MAX_DELAY_MS = 30000;
 
 function createOnnxWorkerLaneState() {
     return {
@@ -29,7 +32,9 @@ function createOnnxWorkerLaneState() {
         activeRunRequests: 0,
         runSlotWaiters: [],
         initialized: false,
-        selectedProvider: null
+        selectedProvider: null,
+        consecutiveInitFailures: 0,
+        blockedUntilMs: 0
     };
 }
 
@@ -95,7 +100,7 @@ function normalizeOnnxExecutionLane(lane) {
     }
 
     if (typeof lane === 'string' && lane.startsWith(ONNX_WORKER_LANE_BACKGROUND)) {
-        return lane;
+        return ONNX_WORKER_LANE_BACKGROUND;
     }
 
     return ONNX_WORKER_LANE_FOREGROUND;
@@ -458,6 +463,11 @@ async function postOnnxWorkerRequest(type, payload, transferList = [], lane = ON
 async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
     const normalizedLane = normalizeOnnxExecutionLane(lane);
     const laneState = getOnnxWorkerLaneState(normalizedLane);
+    const now = getOnnxNow();
+
+    if (laneState.blockedUntilMs > now) {
+        throw new Error(`ONNX worker init cooldown active for lane ${normalizedLane}`);
+    }
 
     if (laneState.initialized && laneState.worker) {
         return {
@@ -530,6 +540,8 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
 
             laneState.initialized = true;
             laneState.selectedProvider = initResult?.provider || 'wasm-worker';
+            laneState.consecutiveInitFailures = 0;
+            laneState.blockedUntilMs = 0;
 
             if (normalizedLane === ONNX_WORKER_LANE_FOREGROUND) {
                 onnxInitialized = true;
@@ -546,11 +558,20 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
 
             return initResult;
         } catch (error) {
+            laneState.consecutiveInitFailures = (laneState.consecutiveInitFailures || 0) + 1;
+            const delayMs = Math.min(
+                ONNX_INIT_RETRY_MAX_DELAY_MS,
+                ONNX_INIT_RETRY_BASE_DELAY_MS * Math.pow(2, Math.max(0, laneState.consecutiveInitFailures - 1))
+            );
+            laneState.blockedUntilMs = getOnnxNow() + delayMs;
+
             runtimeLog('onnx:init-failed', {
                 lane: normalizedLane,
                 model: onnxActiveModel.label,
                 modelPath: onnxActiveModel.modelPath,
                 durationMs: formatOnnxDurationMs(startedAt),
+                consecutiveInitFailures: laneState.consecutiveInitFailures,
+                retryBlockedForMs: delayMs,
                 error: serializeOnnxError(error)
             });
             resetOnnxWorkerState(normalizedLane);
@@ -1459,7 +1480,7 @@ async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions =
 
 async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourceHeight, executionOptions = {}) {
     const executionLane = normalizeOnnxExecutionLane(executionOptions?.lane);
-    const preferMainThreadPath = executionLane === ONNX_WORKER_LANE_FOREGROUND;
+    const preferMainThreadPath = ONNX_USE_MAIN_THREAD_TILED_PATH && executionLane === ONNX_WORKER_LANE_FOREGROUND;
     let fellBackToWorkerPath = false;
     const tileEdge = resolveOnnxTileEdgePixels();
     const overlap = onnxActiveModel.tileOverlapPixels;
