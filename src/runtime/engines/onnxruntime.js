@@ -9,6 +9,7 @@ let onnxSelectedProvider = null;
 let onnxPreprocessCanvas = null;
 let onnxPreprocessContext = null;
 let onnxBackgroundWarmupPromise = null;
+let onnxCanUseMainThreadTensorFromImage = null;
 const ONNX_WORKER_LANE_FOREGROUND = 'foreground';
 const ONNX_WORKER_LANE_BACKGROUND = 'background';
 let onnxWorkingCanvasPool = {
@@ -56,6 +57,7 @@ const ONNX_MAX_TILE_EDGE_PIXELS = 512;
 const ONNX_TILE_YIELD_MS = 0;
 const ONNX_TILE_YIELD_EVERY_TILES = 4;
 const ONNX_MODEL_INPUT_ALIGNMENT = 2;
+const ONNX_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
 let onnxCacheDbPromise = null;
 
 function getOnnxNow() {
@@ -66,11 +68,23 @@ function getOnnxNow() {
 }
 
 function normalizeOnnxExecutionLane(lane) {
-    return lane === ONNX_WORKER_LANE_BACKGROUND ? ONNX_WORKER_LANE_BACKGROUND : ONNX_WORKER_LANE_FOREGROUND;
+    if (lane === ONNX_WORKER_LANE_FOREGROUND) {
+        return ONNX_WORKER_LANE_FOREGROUND;
+    }
+
+    if (typeof lane === 'string' && lane.startsWith(ONNX_WORKER_LANE_BACKGROUND)) {
+        return lane;
+    }
+
+    return ONNX_WORKER_LANE_FOREGROUND;
 }
 
 function getOnnxWorkerLaneState(lane = ONNX_WORKER_LANE_FOREGROUND) {
-    return onnxWorkerLaneStates[normalizeOnnxExecutionLane(lane)];
+    const normalizedLane = normalizeOnnxExecutionLane(lane);
+    if (!onnxWorkerLaneStates[normalizedLane]) {
+        onnxWorkerLaneStates[normalizedLane] = createOnnxWorkerLaneState();
+    }
+    return onnxWorkerLaneStates[normalizedLane];
 }
 
 function serializeOnnxError(error) {
@@ -166,17 +180,13 @@ function getOnnxOrtWasmBinaryUrl() {
     return `${getOnnxOrtDistUrl()}ort-wasm-simd-threaded.jsep.wasm`;
 }
 
-function toTransferableArrayBuffer(typedArray) {
-    if (!typedArray || !typedArray.buffer) {
-        throw new Error('Expected a typed array with an ArrayBuffer for transferable conversion');
+function cloneTypedArrayForTransfer(typedArray) {
+    if (!typedArray || typeof typedArray.byteLength !== 'number') {
+        throw new Error('Expected a typed array for transfer cloning');
     }
 
-    // Avoid a full copy when the typed array already spans the whole underlying buffer.
-    if (typedArray.byteOffset === 0 && typedArray.byteLength === typedArray.buffer.byteLength) {
-        return typedArray.buffer;
-    }
-
-    return typedArray.buffer.slice(typedArray.byteOffset, typedArray.byteOffset + typedArray.byteLength);
+    // Always clone before transfer so lane initialization cannot detach shared artifact backing buffers.
+    return typedArray.slice().buffer;
 }
 
 function rejectAllOnnxWorkerRequests(laneState, error) {
@@ -428,8 +438,8 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
     laneState.readyPromise = (async () => {
         const startedAt = getOnnxNow();
         const artifacts = await loadOnnxArtifacts();
-        const modelBuffer = toTransferableArrayBuffer(artifacts.modelBytes);
-        const externalDataBuffer = toTransferableArrayBuffer(artifacts.externalDataBytes);
+        const modelBuffer = cloneTypedArrayForTransfer(artifacts.modelBytes);
+        const externalDataBuffer = cloneTypedArrayForTransfer(artifacts.externalDataBytes);
 
         runtimeLog('onnx:worker-init-dispatch', {
             lane: normalizedLane,
@@ -898,7 +908,7 @@ function imageToOnnxWorkerInput(image) {
     return {
         width,
         height,
-        rgbaBuffer: toTransferableArrayBuffer(imageData.data)
+        rgbaBuffer: imageData.data.buffer
     };
 }
 
@@ -974,16 +984,24 @@ async function imageToOnnxMainThreadTensor(image) {
         throw new Error('ONNX Runtime Web is unavailable for main-thread inference');
     }
 
-    if (typeof lib.Tensor.fromImage === 'function') {
+    if (
+        onnxCanUseMainThreadTensorFromImage !== false &&
+        typeof lib.Tensor.fromImage === 'function' &&
+        typeof ImageData === 'function'
+    ) {
         try {
-            return await lib.Tensor.fromImage(imageData, {
+            const tensor = await lib.Tensor.fromImage(imageData, {
                 tensorLayout: 'NCHW',
                 tensorFormat: 'RGB',
                 dataType: 'float32'
             });
+            onnxCanUseMainThreadTensorFromImage = true;
+            return tensor;
         } catch (error) {
+            onnxCanUseMainThreadTensorFromImage = false;
             runtimeLog('onnx:main-fromimage-fallback', {
-                reason: String(error)
+                reason: String(error),
+                disabledAfterFailure: true
             });
         }
     }
@@ -991,12 +1009,14 @@ async function imageToOnnxMainThreadTensor(image) {
     const rgba = imageData.data;
     const pixelCount = width * height;
     const chw = new Float32Array(pixelCount * 3);
+    const gBase = pixelCount;
+    const bBase = pixelCount * 2;
 
     for (let i = 0; i < pixelCount; i++) {
-        const srcOffset = i * 4;
-        chw[i] = rgba[srcOffset] / 255;
-        chw[pixelCount + i] = rgba[srcOffset + 1] / 255;
-        chw[pixelCount * 2 + i] = rgba[srcOffset + 2] / 255;
+        const srcOffset = i << 2;
+        chw[i] = rgba[srcOffset] * ONNX_BYTE_TO_UNIT_FLOAT;
+        chw[gBase + i] = rgba[srcOffset + 1] * ONNX_BYTE_TO_UNIT_FLOAT;
+        chw[bBase + i] = rgba[srcOffset + 2] * ONNX_BYTE_TO_UNIT_FLOAT;
     }
 
     return new lib.Tensor('float32', chw, [1, 3, height, width]);
@@ -1059,18 +1079,22 @@ async function drawOnnxTensorToCanvas(outputTensor, canvas, cropWidth = null, cr
     const channelStride = pixelCount;
     const batchStride = channels * channelStride;
     const base = 0 * batchStride;
+    const rStride = base;
+    const gStride = base + channelStride;
+    const bStride = base + channelStride * 2;
     const valueScale = inferOnnxOutputScale(data);
     const rgba = new Uint8ClampedArray(finalWidth * finalHeight * 4);
 
+    let dst = 0;
     for (let y = 0; y < finalHeight; y++) {
-        const rowStart = y * outWidth;
+        const srcRowOffset = y * outWidth;
         for (let x = 0; x < finalWidth; x++) {
-            const src = rowStart + x;
-            const dst = (y * finalWidth + x) * 4;
-            rgba[dst] = Math.max(0, Math.min(255, Math.round(data[base + src] * valueScale)));
-            rgba[dst + 1] = Math.max(0, Math.min(255, Math.round(data[base + channelStride + src] * valueScale)));
-            rgba[dst + 2] = Math.max(0, Math.min(255, Math.round(data[base + channelStride * 2 + src] * valueScale)));
+            const src = srcRowOffset + x;
+            rgba[dst] = Math.max(0, Math.min(255, Math.round(data[rStride + src] * valueScale)));
+            rgba[dst + 1] = Math.max(0, Math.min(255, Math.round(data[gStride + src] * valueScale)));
+            rgba[dst + 2] = Math.max(0, Math.min(255, Math.round(data[bStride + src] * valueScale)));
             rgba[dst + 3] = 255;
+            dst += 4;
         }
     }
 
@@ -1631,8 +1655,18 @@ async function prewarmOnnx() {
 }
 
 function resetOnnxAdapterState() {
-    resetOnnxWorkerState(ONNX_WORKER_LANE_FOREGROUND);
-    resetOnnxWorkerState(ONNX_WORKER_LANE_BACKGROUND);
+    const laneKeys = Object.keys(onnxWorkerLaneStates);
+    for (const laneKey of laneKeys) {
+        resetOnnxWorkerState(laneKey);
+    }
+
+    for (const laneKey of laneKeys) {
+        delete onnxWorkerLaneStates[laneKey];
+    }
+
+    onnxWorkerLaneStates[ONNX_WORKER_LANE_FOREGROUND] = createOnnxWorkerLaneState();
+    onnxWorkerLaneStates[ONNX_WORKER_LANE_BACKGROUND] = createOnnxWorkerLaneState();
+
     onnxSession = null;
     onnxSessionPromise = null;
     onnxInitialized = false;

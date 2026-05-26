@@ -8,6 +8,7 @@ const queuedSourceUrls = new Set();
 const queuedPageKeyCounts = new Map();
 const seenPerformanceResourceUrls = new Set();
 const BACKGROUND_QUEUE_YIELD_MS = 10;
+const BACKGROUND_QUEUE_MAX_CONCURRENCY = 2;
 let backgroundQueueResetVersion = 0;
 
 function isBackgroundQueueRunning() {
@@ -177,6 +178,121 @@ async function preprocessBackgroundImage(sourceUrl) {
     }
 }
 
+function getBackgroundExecutionLane(slotIndex) {
+    const normalizedSlot = Number.isFinite(slotIndex) ? Math.max(0, Math.floor(slotIndex)) : 0;
+    if (normalizedSlot <= 0) {
+        return 'background';
+    }
+
+    return `background-${normalizedSlot}`;
+}
+
+async function processBackgroundQueueItem(sourceUrl, runResetVersion, executionLane) {
+    const itemRuntimeSettings = getRuntimePreferenceSnapshot();
+
+    const persistedCachedBlob = await getProcessedCacheBlob(sourceUrl, itemRuntimeSettings);
+    if (persistedCachedBlob) {
+        logQueueEvent('bg-process:skip-cached', sourceUrl, {
+            cache: 'persistent-after-dequeue',
+            persistedSizeBytes: persistedCachedBlob.size
+        });
+        return;
+    }
+
+    const activeUrl = getActiveForegroundSourceUrl();
+    if (sourceUrl === activeUrl) {
+        logQueueEvent('bg-process:skip-now-foreground', sourceUrl);
+        return;
+    }
+
+    const page = getSourcePageNumber(sourceUrl);
+    const pageKey = getSourcePageKey(sourceUrl);
+    if (page == null) {
+        logQueueEvent('bg-process:page-missing', sourceUrl);
+    }
+    if (pageKey) inFlightPageKeys.add(pageKey);
+
+    try {
+        const tempImg = await loadSourceImage(sourceUrl);
+
+        if (runResetVersion !== backgroundQueueResetVersion) {
+            logQueueEvent('bg-process:cancelled-after-load', sourceUrl);
+            return;
+        }
+
+        const sourceWidth = tempImg.naturalWidth || tempImg.width;
+        const sourceHeight = tempImg.naturalHeight || tempImg.height;
+        const backend = getEffectiveBackend(itemRuntimeSettings);
+        const rawScale = backend === 'webgpu' ? itemRuntimeSettings?.selectedWebGpuScale : 2;
+        const requestedScale = Number(rawScale);
+        const effectiveScale = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1;
+        const targetWidth = Math.max(1, Math.round(sourceWidth * effectiveScale));
+        const targetHeight = Math.max(1, Math.round(sourceHeight * effectiveScale));
+
+        if (!canCanvasSupportDimensions(sourceWidth, sourceHeight)) {
+            if (pageKey) processedPageKeys.add(pageKey);
+            logQueueEvent('bg-process:skip-oversize', sourceUrl, {
+                sourceWidth,
+                sourceHeight,
+                targetWidth,
+                targetHeight,
+                maxCanvasDimension: getMaxCanvasDimension(),
+                backend
+            });
+            return;
+        }
+
+        if (!isForegroundTab()) {
+            logQueueEvent('bg-process:skip-hidden-after-load', sourceUrl);
+            return;
+        }
+
+        const bgCanvas = document.createElement('canvas');
+        const t3 = performance.now();
+        const runInfo = await upscaleWithSelectedBackend(tempImg, bgCanvas, itemRuntimeSettings, {
+            lane: executionLane
+        });
+        const t4 = performance.now();
+        log('bg-process:upscale-time', {
+            sourceUrl,
+            page,
+            lane: executionLane,
+            duration: (t4 - t3).toFixed(2) + 'ms',
+            backend: runInfo.backend,
+            runMode: runInfo.runMode,
+            model: runInfo.model
+        });
+
+        if (pageKey) processedPageKeys.add(pageKey);
+
+        if (bgCanvas.width <= 0 || bgCanvas.height <= 0) {
+            throw new Error('Canvas output is empty after upscale');
+        }
+
+        const processedBlob = await canvasToBlob(bgCanvas);
+
+        if (runResetVersion !== backgroundQueueResetVersion) {
+            logQueueEvent('bg-process:cancelled-before-cache', sourceUrl);
+            return;
+        }
+
+        if (!isForegroundTab()) {
+            logQueueEvent('bg-process:skip-hidden-before-cache', sourceUrl);
+            return;
+        }
+
+        await setProcessedCacheBlob(sourceUrl, processedBlob, itemRuntimeSettings);
+        logQueueEvent('bg-process:cached', sourceUrl, {
+            width: bgCanvas.width,
+            height: bgCanvas.height,
+        });
+    } catch (err) {
+        log('bg-process:error', { sourceUrl, page, lane: executionLane, error: String(err) });
+    } finally {
+        if (pageKey) inFlightPageKeys.delete(pageKey);
+    }
+}
+
 async function processBackgroundQueue() {
     if (isBackgroundQueueRunning()) {
         return backgroundQueueRunPromise;
@@ -212,129 +328,70 @@ async function processBackgroundQueue() {
 
     log('bg-queue:start', { queueSize: backgroundQueue.length });
 
-    while (backgroundQueue.length > 0) {
+    const maxConcurrency = Math.max(1, Math.floor(BACKGROUND_QUEUE_MAX_CONCURRENCY));
+    const activeTasks = new Set();
+    let nextLaneSlot = 0;
+    let pausedForHiddenTab = false;
+
+    while (backgroundQueue.length > 0 || activeTasks.size > 0) {
         if (runResetVersion !== backgroundQueueResetVersion) {
-            log('bg-queue:cancelled', { reason: 'reset-mid-run', queueSize: backgroundQueue.length });
+            log('bg-queue:cancelled', {
+                reason: 'reset-mid-run',
+                queueSize: backgroundQueue.length,
+                activeTasks: activeTasks.size
+            });
             break;
         }
 
         if (!isForegroundTab()) {
-            log('bg-queue:paused', { reason: 'tab-hidden-mid-run', queueSize: backgroundQueue.length });
+            pausedForHiddenTab = true;
+        }
+
+        while (!pausedForHiddenTab && activeTasks.size < maxConcurrency && backgroundQueue.length > 0) {
+            const nextIndex = getNextBackgroundQueueIndex();
+            if (nextIndex < 0) {
+                break;
+            }
+
+            const sourceUrl = dequeueBackgroundQueueUrlAt(nextIndex);
+            if (!sourceUrl) {
+                continue;
+            }
+
+            const executionLane = getBackgroundExecutionLane(nextLaneSlot % maxConcurrency);
+            nextLaneSlot += 1;
+
+            logQueueEvent('bg-queue:dequeued', sourceUrl, {
+                nextIndex,
+                executionLane,
+                activeTasks: activeTasks.size
+            });
+
+            let taskPromise;
+            taskPromise = processBackgroundQueueItem(sourceUrl, runResetVersion, executionLane)
+                .finally(() => {
+                    activeTasks.delete(taskPromise);
+                });
+
+            activeTasks.add(taskPromise);
+        }
+
+        if (activeTasks.size === 0) {
             break;
         }
 
-        const nextIndex = getNextBackgroundQueueIndex();
-        if (nextIndex < 0) break;
-        const sourceUrl = dequeueBackgroundQueueUrlAt(nextIndex);
-        if (!sourceUrl) {
-            continue;
+        await Promise.race(activeTasks);
+
+        if (BACKGROUND_QUEUE_YIELD_MS > 0) {
+            await new Promise((resolve) => setTimeout(resolve, BACKGROUND_QUEUE_YIELD_MS));
         }
-        logQueueEvent('bg-queue:dequeued', sourceUrl, { nextIndex });
+    }
 
-        const itemRuntimeSettings = getRuntimePreferenceSnapshot();
-
-        const persistedCachedBlob = await getProcessedCacheBlob(sourceUrl, itemRuntimeSettings);
-        if (persistedCachedBlob) {
-            logQueueEvent('bg-process:skip-cached', sourceUrl, {
-                cache: 'persistent-after-dequeue',
-                persistedSizeBytes: persistedCachedBlob.size
-            });
-            continue;
-        }
-
-        const activeUrl = getActiveForegroundSourceUrl();
-        if (sourceUrl === activeUrl) {
-            logQueueEvent('bg-process:skip-now-foreground', sourceUrl);
-            continue;
-        }
-
-        const page = getSourcePageNumber(sourceUrl);
-        const pageKey = getSourcePageKey(sourceUrl);
-        if (page == null) {
-            logQueueEvent('bg-process:page-missing', sourceUrl);
-        }
-        if (pageKey) inFlightPageKeys.add(pageKey);
-
-        try {
-            const tempImg = await loadSourceImage(sourceUrl);
-
-            if (runResetVersion !== backgroundQueueResetVersion) {
-                logQueueEvent('bg-process:cancelled-after-load', sourceUrl);
-                continue;
-            }
-
-            const sourceWidth = tempImg.naturalWidth || tempImg.width;
-            const sourceHeight = tempImg.naturalHeight || tempImg.height;
-            const backend = getEffectiveBackend(itemRuntimeSettings);
-            const rawScale = backend === 'webgpu' ? itemRuntimeSettings?.selectedWebGpuScale : 2;
-            const requestedScale = Number(rawScale);
-            const effectiveScale = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1;
-            const targetWidth = Math.max(1, Math.round(sourceWidth * effectiveScale));
-            const targetHeight = Math.max(1, Math.round(sourceHeight * effectiveScale));
-
-            if (!canCanvasSupportDimensions(sourceWidth, sourceHeight)) {
-                if (pageKey) processedPageKeys.add(pageKey);
-                logQueueEvent('bg-process:skip-oversize', sourceUrl, {
-                    sourceWidth,
-                    sourceHeight,
-                    targetWidth,
-                    targetHeight,
-                    maxCanvasDimension: getMaxCanvasDimension(),
-                    backend
-                });
-                continue;
-            }
-
-            if (!isForegroundTab()) {
-                logQueueEvent('bg-process:skip-hidden-after-load', sourceUrl);
-                continue;
-            }
-
-            const bgCanvas = document.createElement('canvas');
-            const t3 = performance.now();
-            const runInfo = await upscaleWithSelectedBackend(tempImg, bgCanvas, itemRuntimeSettings, {
-                lane: 'background'
-            });
-            const t4 = performance.now();
-            log('bg-process:upscale-time', {
-                sourceUrl,
-                page,
-                duration: (t4 - t3).toFixed(2) + 'ms',
-                backend: runInfo.backend,
-                runMode: runInfo.runMode,
-                model: runInfo.model
-            });
-
-            if (pageKey) processedPageKeys.add(pageKey);
-
-            if (bgCanvas.width <= 0 || bgCanvas.height <= 0) {
-                throw new Error('Canvas output is empty after upscale');
-            }
-
-            const processedBlob = await canvasToBlob(bgCanvas);
-
-            if (runResetVersion !== backgroundQueueResetVersion) {
-                logQueueEvent('bg-process:cancelled-before-cache', sourceUrl);
-                continue;
-            }
-
-            if (!isForegroundTab()) {
-                logQueueEvent('bg-process:skip-hidden-before-cache', sourceUrl);
-                continue;
-            }
-
-            await setProcessedCacheBlob(sourceUrl, processedBlob, itemRuntimeSettings);
-            logQueueEvent('bg-process:cached', sourceUrl, {
-                width: bgCanvas.width,
-                height: bgCanvas.height,
-            });
-        } catch (err) {
-            log('bg-process:error', { sourceUrl, page, error: String(err) });
-        } finally {
-            if (pageKey) inFlightPageKeys.delete(pageKey);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, BACKGROUND_QUEUE_YIELD_MS));
+    if (pausedForHiddenTab && backgroundQueue.length > 0) {
+        log('bg-queue:paused', {
+            reason: 'tab-hidden-mid-run',
+            queueSize: backgroundQueue.length
+        });
     }
 
     })();
