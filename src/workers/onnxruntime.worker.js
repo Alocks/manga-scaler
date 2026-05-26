@@ -5,7 +5,10 @@ let workerProvider = null;
 let workerRunCounter = 0;
 let workerRunQueueDepth = 0;
 let workerRunSerial = Promise.resolve();
+let workerCanUseTensorFromImage = null;
 const WORKER_RUN_WARNING_MS = 5000;
+const WORKER_MAX_BUFFERED_RUNS = 1;
+const WORKER_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
 
 function getWorkerNow() {
     if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
@@ -100,17 +103,25 @@ async function imageBufferToTensor(rgbaBuffer, width, height) {
         throw new Error('ONNX worker received an invalid input pixel buffer');
     }
 
-    if (typeof workerOrt?.Tensor?.fromImage === 'function') {
+    if (
+        workerCanUseTensorFromImage !== false &&
+        typeof workerOrt?.Tensor?.fromImage === 'function' &&
+        typeof ImageData === 'function'
+    ) {
         try {
             const imageData = new ImageData(new Uint8ClampedArray(rgbaBuffer), width, height);
-            return await workerOrt.Tensor.fromImage(imageData, {
+            const tensor = await workerOrt.Tensor.fromImage(imageData, {
                 tensorLayout: 'NCHW',
                 tensorFormat: 'RGB',
                 dataType: 'float32'
             });
+            workerCanUseTensorFromImage = true;
+            return tensor;
         } catch (error) {
+            workerCanUseTensorFromImage = false;
             postWorkerLog('onnx:worker-fromimage-fallback', {
-                reason: String(error)
+                reason: String(error),
+                disabledAfterFailure: true
             });
         }
     }
@@ -118,12 +129,14 @@ async function imageBufferToTensor(rgbaBuffer, width, height) {
     const rgba = new Uint8Array(rgbaBuffer);
     const pixelCount = width * height;
     const chw = new Float32Array(pixelCount * 3);
+    const gBase = pixelCount;
+    const bBase = pixelCount * 2;
 
     for (let i = 0; i < pixelCount; i++) {
-        const srcOffset = i * 4;
-        chw[i] = rgba[srcOffset] / 255;
-        chw[pixelCount + i] = rgba[srcOffset + 1] / 255;
-        chw[pixelCount * 2 + i] = rgba[srcOffset + 2] / 255;
+        const srcOffset = i << 2;
+        chw[i] = rgba[srcOffset] * WORKER_BYTE_TO_UNIT_FLOAT;
+        chw[gBase + i] = rgba[srcOffset + 1] * WORKER_BYTE_TO_UNIT_FLOAT;
+        chw[bBase + i] = rgba[srcOffset + 2] * WORKER_BYTE_TO_UNIT_FLOAT;
     }
 
     return new workerOrt.Tensor('float32', chw, [1, 3, height, width]);
@@ -403,6 +416,19 @@ self.onmessage = async (event) => {
         }
 
         if (message.type === 'run') {
+            if (workerRunQueueDepth >= WORKER_MAX_BUFFERED_RUNS) {
+                const backpressureError = new Error('ONNX worker queue is saturated; rejecting run to prevent memory growth');
+                backpressureError.name = 'OnnxWorkerBackpressureError';
+
+                postWorkerLog('onnx:worker-run-rejected-backpressure', {
+                    id: message.id || null,
+                    queueDepth: workerRunQueueDepth,
+                    maxBufferedRuns: WORKER_MAX_BUFFERED_RUNS
+                });
+
+                throw backpressureError;
+            }
+
             const result = await runWorkerInference(message.payload);
             response.ok = true;
             response.payload = result;

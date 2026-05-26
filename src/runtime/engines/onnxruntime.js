@@ -16,6 +16,7 @@ let onnxWorkingCanvasPool = {
     [ONNX_WORKER_LANE_BACKGROUND]: Object.create(null)
 };
 const ONNX_WORKER_PENDING_WARNING_MS = 5000;
+const ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS = 1;
 
 function createOnnxWorkerLaneState() {
     return {
@@ -24,6 +25,8 @@ function createOnnxWorkerLaneState() {
         requestId: 0,
         bootstrapUrl: null,
         pendingRequests: new Map(),
+        activeRunRequests: 0,
+        runSlotWaiters: [],
         initialized: false,
         selectedProvider: null
     };
@@ -51,6 +54,7 @@ const ONNX_TILE_OVERLAP_PIXELS = 16;
 const ONNX_MIN_TILE_EDGE_PIXELS = 128;
 const ONNX_MAX_TILE_EDGE_PIXELS = 512;
 const ONNX_TILE_YIELD_MS = 0;
+const ONNX_TILE_YIELD_EVERY_TILES = 4;
 const ONNX_MODEL_INPUT_ALIGNMENT = 2;
 let onnxCacheDbPromise = null;
 
@@ -185,6 +189,50 @@ function rejectAllOnnxWorkerRequests(laneState, error) {
     }
 }
 
+function drainOnnxWorkerRunSlotWaiters(laneState) {
+    if (!laneState || !Array.isArray(laneState.runSlotWaiters)) return;
+
+    while (laneState.runSlotWaiters.length > 0) {
+        const resolve = laneState.runSlotWaiters.shift();
+        if (typeof resolve === 'function') {
+            resolve();
+        }
+    }
+}
+
+function releaseOnnxWorkerRunSlot(laneState) {
+    if (!laneState) return;
+
+    if (laneState.activeRunRequests > 0) {
+        laneState.activeRunRequests -= 1;
+    }
+
+    if (
+        laneState.activeRunRequests < ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS &&
+        Array.isArray(laneState.runSlotWaiters) &&
+        laneState.runSlotWaiters.length > 0
+    ) {
+        const resolve = laneState.runSlotWaiters.shift();
+        if (typeof resolve === 'function') {
+            resolve();
+        }
+    }
+}
+
+function waitForOnnxWorkerRunSlot(laneState) {
+    if (!laneState) {
+        return Promise.resolve();
+    }
+
+    if (laneState.activeRunRequests < ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+        laneState.runSlotWaiters.push(resolve);
+    });
+}
+
 function createOnnxWorkerMessageHandler(laneState, lane) {
     return function handleOnnxWorkerMessage(event) {
     const message = event?.data;
@@ -212,6 +260,10 @@ function createOnnxWorkerMessageHandler(laneState, lane) {
     laneState.pendingRequests.delete(message.id);
     if (pending.warningTimeoutId) {
         window.clearTimeout(pending.warningTimeoutId);
+    }
+
+    if (pending.type === 'run') {
+        releaseOnnxWorkerRunSlot(laneState);
     }
 
     if (message.ok) {
@@ -246,6 +298,8 @@ function resetOnnxWorkerState(lane = ONNX_WORKER_LANE_FOREGROUND, terminate = tr
     laneState.readyPromise = null;
     laneState.initialized = false;
     laneState.selectedProvider = null;
+    laneState.activeRunRequests = 0;
+    drainOnnxWorkerRunSlotWaiters(laneState);
     rejectAllOnnxWorkerRequests(laneState, new Error('ONNX worker was reset'));
 
     if (normalizedLane === ONNX_WORKER_LANE_FOREGROUND) {
@@ -301,12 +355,27 @@ function getOrCreateOnnxWorker(lane = ONNX_WORKER_LANE_FOREGROUND) {
     return worker;
 }
 
-function postOnnxWorkerRequest(type, payload, transferList = [], lane = ONNX_WORKER_LANE_FOREGROUND) {
+async function postOnnxWorkerRequest(type, payload, transferList = [], lane = ONNX_WORKER_LANE_FOREGROUND) {
     const normalizedLane = normalizeOnnxExecutionLane(lane);
     const laneState = getOnnxWorkerLaneState(normalizedLane);
     const worker = getOrCreateOnnxWorker(normalizedLane);
     const requestId = ++laneState.requestId;
     const requestStartedAt = getOnnxNow();
+
+    if (type === 'run') {
+        if (laneState.activeRunRequests >= ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS) {
+            runtimeLog('onnx:worker-run-backpressure-wait', {
+                lane: normalizedLane,
+                requestId,
+                activeRunRequests: laneState.activeRunRequests,
+                pendingRequestCount: laneState.pendingRequests.size,
+                maxInflightRunRequests: ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS
+            });
+        }
+
+        await waitForOnnxWorkerRunSlot(laneState);
+        laneState.activeRunRequests += 1;
+    }
 
     return new Promise((resolve, reject) => {
         const warningTimeoutId = window.setTimeout(() => {
@@ -326,7 +395,17 @@ function postOnnxWorkerRequest(type, payload, transferList = [], lane = ONNX_WOR
             warningTimeoutId,
             requestStartedAt
         });
-        worker.postMessage({ id: requestId, type, payload }, transferList);
+
+        try {
+            worker.postMessage({ id: requestId, type, payload }, transferList);
+        } catch (error) {
+            laneState.pendingRequests.delete(requestId);
+            window.clearTimeout(warningTimeoutId);
+            if (type === 'run') {
+                releaseOnnxWorkerRunSlot(laneState);
+            }
+            reject(error);
+        }
     });
 }
 
@@ -584,7 +663,6 @@ async function createOnnxSession() {
     const sessionOptions = {
         executionProviders: ['webgpu'],
         graphOptimizationLevel: 'all',
-        preferredOutputLocation: 'gpu-buffer',
         externalData: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES.map((path) => ({
             path,
             data: artifacts.externalDataBytes
@@ -592,7 +670,7 @@ async function createOnnxSession() {
     };
 
     runtimeLog('onnx:session-create-start', {
-        providerCandidates: ['wasm'],
+        providerCandidates: ['webgpu'],
         modelUrl: artifacts.modelUrl,
         externalDataUrl: artifacts.externalDataUrl,
         externalDataPathAliases: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES,
@@ -605,7 +683,7 @@ async function createOnnxSession() {
 
     try {
         const session = await lib.InferenceSession.create(artifacts.modelBytes, sessionOptions);
-        onnxSelectedProvider = 'wasm';
+        onnxSelectedProvider = 'webgpu-main';
 
         runtimeLog('onnx:session-create-success', {
             provider: onnxSelectedProvider,
@@ -619,7 +697,7 @@ async function createOnnxSession() {
     } catch (error) {
         runtimeLog('onnx:session-create-failed', {
             durationMs: formatOnnxDurationMs(startedAt),
-            providerCandidates: ['wasm'],
+            providerCandidates: ['webgpu'],
             modelUrl: artifacts.modelUrl,
             externalDataUrl: artifacts.externalDataUrl,
             externalDataPathAliases: ONNX_EXTERNAL_DATA_MODEL_PATH_ALIASES,
@@ -849,6 +927,272 @@ function drawOnnxWorkerOutputToCanvas(workerResult, canvas) {
     ctx.putImageData(imageData, 0, 0);
 }
 
+function resolveOnnxOutputTensor(runResult, outputNames = []) {
+    if (!runResult || typeof runResult !== 'object') {
+        throw new Error('ONNX Runtime returned an invalid inference result');
+    }
+
+    if (outputNames.length > 0 && runResult[outputNames[0]]) {
+        return runResult[outputNames[0]];
+    }
+
+    const firstTensor = Object.values(runResult)[0];
+    if (!firstTensor) {
+        throw new Error('ONNX Runtime did not return any output tensors');
+    }
+
+    return firstTensor;
+}
+
+function inferOnnxOutputScale(data) {
+    const sampleCount = Math.min(2048, data.length);
+    let maxValue = 0;
+    for (let i = 0; i < sampleCount; i++) {
+        const value = data[i];
+        if (value > maxValue) {
+            maxValue = value;
+        }
+    }
+    return maxValue <= 1.5 ? 255 : 1;
+}
+
+async function imageToOnnxMainThreadTensor(image) {
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        throw new Error('Invalid source image dimensions for ONNX Runtime');
+    }
+
+    const ctx = getOnnxPreprocessContext(width, height);
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const lib = getOnnxLibrary();
+    if (!isOnnxLibrarySupported(lib)) {
+        throw new Error('ONNX Runtime Web is unavailable for main-thread inference');
+    }
+
+    if (typeof lib.Tensor.fromImage === 'function') {
+        try {
+            return await lib.Tensor.fromImage(imageData, {
+                tensorLayout: 'NCHW',
+                tensorFormat: 'RGB',
+                dataType: 'float32'
+            });
+        } catch (error) {
+            runtimeLog('onnx:main-fromimage-fallback', {
+                reason: String(error)
+            });
+        }
+    }
+
+    const rgba = imageData.data;
+    const pixelCount = width * height;
+    const chw = new Float32Array(pixelCount * 3);
+
+    for (let i = 0; i < pixelCount; i++) {
+        const srcOffset = i * 4;
+        chw[i] = rgba[srcOffset] / 255;
+        chw[pixelCount + i] = rgba[srcOffset + 1] / 255;
+        chw[pixelCount * 2 + i] = rgba[srcOffset + 2] / 255;
+    }
+
+    return new lib.Tensor('float32', chw, [1, 3, height, width]);
+}
+
+async function drawOnnxTensorToCanvas(outputTensor, canvas, cropWidth = null, cropHeight = null) {
+    if (!outputTensor || !Array.isArray(outputTensor.dims) || outputTensor.dims.length !== 4) {
+        throw new Error('Unexpected ONNX output tensor shape. Expected rank-4 [N,C,H,W]');
+    }
+
+    const [batch, channels, outHeight, outWidth] = outputTensor.dims;
+    if (!Number.isFinite(batch) || batch < 1 || channels < 3 || outHeight < 1 || outWidth < 1) {
+        throw new Error(`Invalid ONNX output tensor dims: ${JSON.stringify(outputTensor.dims)}`);
+    }
+
+    const finalWidth = Math.max(1, Math.min(outWidth, Math.round(cropWidth || outWidth)));
+    const finalHeight = Math.max(1, Math.min(outHeight, Math.round(cropHeight || outHeight)));
+
+    canvas.width = finalWidth;
+    canvas.height = finalHeight;
+
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    if (!ctx) {
+        throw new Error('Failed to acquire output canvas context for ONNX Runtime');
+    }
+
+    if (typeof outputTensor.toImageData === 'function') {
+        try {
+            const imageData = outputTensor.toImageData({
+                tensorLayout: 'NCHW',
+                format: 'RGB'
+            });
+            if (imageData && imageData.data && imageData.width === outWidth && imageData.height === outHeight) {
+                ctx.putImageData(imageData, 0, 0, 0, 0, finalWidth, finalHeight);
+                return;
+            }
+        } catch (error) {
+            runtimeLog('onnx:main-toimagedata-fallback', {
+                reason: String(error)
+            });
+        }
+    }
+
+    let data;
+    try {
+        data = outputTensor.data;
+    } catch (error) {
+        if (typeof outputTensor.getData === 'function') {
+            data = await outputTensor.getData();
+        } else {
+            throw error;
+        }
+    }
+
+    if (!data || typeof data.length !== 'number') {
+        throw new Error('ONNX output tensor has no readable data buffer');
+    }
+
+    const pixelCount = outWidth * outHeight;
+    const channelStride = pixelCount;
+    const batchStride = channels * channelStride;
+    const base = 0 * batchStride;
+    const valueScale = inferOnnxOutputScale(data);
+    const rgba = new Uint8ClampedArray(finalWidth * finalHeight * 4);
+
+    for (let y = 0; y < finalHeight; y++) {
+        const rowStart = y * outWidth;
+        for (let x = 0; x < finalWidth; x++) {
+            const src = rowStart + x;
+            const dst = (y * finalWidth + x) * 4;
+            rgba[dst] = Math.max(0, Math.min(255, Math.round(data[base + src] * valueScale)));
+            rgba[dst + 1] = Math.max(0, Math.min(255, Math.round(data[base + channelStride + src] * valueScale)));
+            rgba[dst + 2] = Math.max(0, Math.min(255, Math.round(data[base + channelStride * 2 + src] * valueScale)));
+            rgba[dst + 3] = 255;
+        }
+    }
+
+    ctx.putImageData(new ImageData(rgba, finalWidth, finalHeight), 0, 0);
+}
+
+async function runOnnxInferencePassMainThread(inputImage, outputCanvas, executionOptions = {}) {
+    const executionLane = normalizeOnnxExecutionLane(executionOptions?.lane);
+    const passStartAt = getOnnxNow();
+    const inputWidth = inputImage.naturalWidth || inputImage.width || 0;
+    const inputHeight = inputImage.naturalHeight || inputImage.height || 0;
+    const inputPadding = getOnnxInputPadding(inputWidth, inputHeight);
+    const needsInputPadding = inputPadding.padRight > 0 || inputPadding.padBottom > 0;
+
+    runtimeLog('onnx:pass-main-start', {
+        lane: executionLane,
+        inputWidth,
+        inputHeight,
+        paddedWidth: inputPadding.paddedWidth,
+        paddedHeight: inputPadding.paddedHeight,
+        needsInputPadding
+    });
+
+    let inferenceSourceImage = inputImage;
+    if (needsInputPadding) {
+        inferenceSourceImage = drawOnnxImageWithEdgePadding(
+            inputImage,
+            getOnnxReusableWorkingCanvas(
+                'padded-input-main',
+                inputPadding.paddedWidth,
+                inputPadding.paddedHeight,
+                executionLane
+            ),
+            inputWidth,
+            inputHeight,
+            inputPadding.paddedWidth,
+            inputPadding.paddedHeight
+        );
+    }
+
+    const inferenceInputWidth = inferenceSourceImage.naturalWidth || inferenceSourceImage.width || inputPadding.paddedWidth;
+    const inferenceInputHeight = inferenceSourceImage.naturalHeight || inferenceSourceImage.height || inputPadding.paddedHeight;
+
+    const tensorBuildStartAt = getOnnxNow();
+    const inputTensor = await imageToOnnxMainThreadTensor(inferenceSourceImage);
+    const tensorBuildEndAt = getOnnxNow();
+
+    const session = await getOrCreateOnnxSession();
+    const inputName = session.inputNames?.[0];
+    if (!inputName) {
+        throw new Error('ONNX model has no input name');
+    }
+
+    const inferenceStartAt = getOnnxNow();
+    const outputs = await session.run({ [inputName]: inputTensor });
+    const inferenceEndAt = getOnnxNow();
+    const outputTensor = resolveOnnxOutputTensor(outputs, session.outputNames || []);
+
+    const outputWidth = outputTensor?.dims?.[3] || 0;
+    const outputHeight = outputTensor?.dims?.[2] || 0;
+    const scaleX = outputWidth > 0 ? outputWidth / inferenceInputWidth : 1;
+    const scaleY = outputHeight > 0 ? outputHeight / inferenceInputHeight : 1;
+
+    const canvasWriteStartAt = getOnnxNow();
+    if (needsInputPadding) {
+        const croppedOutputWidth = Math.max(1, Math.round(inputWidth * scaleX));
+        const croppedOutputHeight = Math.max(1, Math.round(inputHeight * scaleY));
+        await drawOnnxTensorToCanvas(outputTensor, outputCanvas, croppedOutputWidth, croppedOutputHeight);
+    } else {
+        await drawOnnxTensorToCanvas(outputTensor, outputCanvas);
+    }
+    const canvasWriteEndAt = getOnnxNow();
+
+    runtimeLog('onnx:pass-main-success', {
+        lane: executionLane,
+        inputName,
+        inputDims: inputTensor.dims,
+        outputDims: outputTensor?.dims || null,
+        tensorBuildMs: formatOnnxDurationMs(tensorBuildStartAt, tensorBuildEndAt),
+        inferenceMs: formatOnnxDurationMs(inferenceStartAt, inferenceEndAt),
+        canvasWriteMs: formatOnnxDurationMs(canvasWriteStartAt, canvasWriteEndAt),
+        totalPassMs: formatOnnxDurationMs(passStartAt)
+    });
+
+    return {
+        inputName,
+        inputDims: inputTensor.dims,
+        outputDims: outputTensor?.dims || null,
+        inferenceMs: formatOnnxDurationMs(inferenceStartAt, inferenceEndAt),
+        outputWidth: outputCanvas.width,
+        outputHeight: outputCanvas.height
+    };
+}
+
+function drawOnnxWorkerOutputCropToCanvas(workerResult, canvas, cropWidth, cropHeight) {
+    const outWidth = workerResult?.outputWidth;
+    const outHeight = workerResult?.outputHeight;
+    const rgbaBuffer = workerResult?.rgbaBuffer;
+
+    if (!Number.isFinite(outWidth) || !Number.isFinite(outHeight) || outWidth < 1 || outHeight < 1) {
+        throw new Error('Worker returned invalid ONNX output dimensions');
+    }
+
+    if (!(rgbaBuffer instanceof ArrayBuffer)) {
+        throw new Error('Worker returned invalid ONNX output pixels');
+    }
+
+    const finalCropWidth = Math.max(1, Math.min(outWidth, Math.round(cropWidth || outWidth)));
+    const finalCropHeight = Math.max(1, Math.min(outHeight, Math.round(cropHeight || outHeight)));
+
+    canvas.width = finalCropWidth;
+    canvas.height = finalCropHeight;
+
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    if (!ctx) {
+        throw new Error('Failed to acquire cropped output canvas context for ONNX Runtime');
+    }
+
+    const imageData = new ImageData(new Uint8ClampedArray(rgbaBuffer), outWidth, outHeight);
+    ctx.putImageData(imageData, 0, 0, 0, 0, finalCropWidth, finalCropHeight);
+}
+
 async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions = {}) {
     const executionLane = normalizeOnnxExecutionLane(executionOptions?.lane);
     const laneState = getOnnxWorkerLaneState(executionLane);
@@ -922,20 +1266,12 @@ async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions =
 
     const canvasWriteStartAt = getOnnxNow();
     if (needsInputPadding) {
-        const paddedOutputCanvas = getOnnxReusableWorkingCanvas(
-            'padded-output',
-            Math.max(1, workerResult.outputWidth || 1),
-            Math.max(1, workerResult.outputHeight || 1),
-            executionLane
-        );
-        drawOnnxWorkerOutputToCanvas(workerResult, paddedOutputCanvas);
-
         const scaleX = workerResult.outputWidth / workerInput.width;
         const scaleY = workerResult.outputHeight / workerInput.height;
         const croppedOutputWidth = Math.max(1, Math.round(inputWidth * scaleX));
         const croppedOutputHeight = Math.max(1, Math.round(inputHeight * scaleY));
 
-        copyOnnxCanvasRegion(paddedOutputCanvas, outputCanvas, croppedOutputWidth, croppedOutputHeight);
+        drawOnnxWorkerOutputCropToCanvas(workerResult, outputCanvas, croppedOutputWidth, croppedOutputHeight);
 
         runtimeLog('onnx:output-cropped', {
             lane: executionLane,
@@ -975,6 +1311,9 @@ async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions =
 }
 
 async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourceHeight, executionOptions = {}) {
+    const executionLane = normalizeOnnxExecutionLane(executionOptions?.lane);
+    const preferMainThreadPath = executionLane === ONNX_WORKER_LANE_FOREGROUND;
+    let fellBackToWorkerPath = false;
     const tileEdge = resolveOnnxTileEdgePixels();
     const overlap = ONNX_TILE_OVERLAP_PIXELS;
     const coreStep = Math.max(64, tileEdge - overlap * 2);
@@ -994,6 +1333,8 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
     let totalInferenceMs = 0;
 
     runtimeLog('onnx:tiled-layout', {
+        lane: executionLane,
+        preferredMode: preferMainThreadPath ? 'main-thread-webgpu' : 'worker',
         sourceWidth,
         sourceHeight,
         tileEdge,
@@ -1063,7 +1404,22 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
                 tileInputHeight
             });
 
-            const pass = await runOnnxInferencePass(tileInputCanvas, tileOutputCanvas, executionOptions);
+            let pass;
+            if (preferMainThreadPath && !fellBackToWorkerPath) {
+                try {
+                    pass = await runOnnxInferencePassMainThread(tileInputCanvas, tileOutputCanvas, executionOptions);
+                } catch (error) {
+                    fellBackToWorkerPath = true;
+                    runtimeLog('onnx:tiled-mainthread-fallback', {
+                        lane: executionLane,
+                        tileIndex: nextTileIndex,
+                        error: serializeOnnxError(error)
+                    });
+                    pass = await runOnnxInferencePass(tileInputCanvas, tileOutputCanvas, executionOptions);
+                }
+            } else {
+                pass = await runOnnxInferencePass(tileInputCanvas, tileOutputCanvas, executionOptions);
+            }
             totalInferenceMs += pass.inferenceMs;
             tileCount++;
 
@@ -1140,15 +1496,20 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
                 destY
             });
 
-            await yieldOnnxTileLoop();
+            if (ONNX_TILE_YIELD_EVERY_TILES > 0 && tileCount % ONNX_TILE_YIELD_EVERY_TILES === 0) {
+                await yieldOnnxTileLoop();
 
-            runtimeLog('onnx:tile-yield-complete', {
-                tileIndex: tileCount
-            });
+                runtimeLog('onnx:tile-yield-complete', {
+                    tileIndex: tileCount,
+                    yieldEveryTiles: ONNX_TILE_YIELD_EVERY_TILES
+                });
+            }
         }
     }
 
     runtimeLog('onnx:tiled-run-success', {
+        lane: executionLane,
+        mode: preferMainThreadPath && !fellBackToWorkerPath ? 'main-thread-webgpu' : 'worker',
         sourceWidth,
         sourceHeight,
         tileEdge,
