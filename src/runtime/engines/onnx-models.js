@@ -31,11 +31,11 @@ const REALESRGAN_2XPLUS_ONNX_MODEL = {
     inputAlignment: 2,
     fixedInputWidth: 0,
     fixedInputHeight: 0,
-    maxSinglePassPixels: 900000,
-    maxForegroundPixels: 1600000,
+    maxSinglePassPixels: 262144,
+    maxForegroundPixels: 262144,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 512
+    maxTileEdgePixels: 256
 };
 
 const REALESRGAN_GENEREAL_X4_V3_ONNX_MODEL = {
@@ -52,11 +52,11 @@ const REALESRGAN_GENEREAL_X4_V3_ONNX_MODEL = {
     inputAlignment: 2,
     fixedInputWidth: 0,
     fixedInputHeight: 0,
-    maxSinglePassPixels: 900000,
-    maxForegroundPixels: 1600000,
+    maxSinglePassPixels: 262144,
+    maxForegroundPixels: 262144,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 512
+    maxTileEdgePixels: 256
 };
 
 const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
@@ -75,11 +75,11 @@ const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
     inputAlignment: 2,
     fixedInputWidth: 0,
     fixedInputHeight: 0,
-    maxSinglePassPixels: 900000,
-    maxForegroundPixels: 1600000,
+    maxSinglePassPixels: 262144,
+    maxForegroundPixels: 262144,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 512
+    maxTileEdgePixels: 256
 };
 
 const UP2X_LATEST_DENOISE1X_ONNX_MODEL = {
@@ -98,11 +98,11 @@ const UP2X_LATEST_DENOISE1X_ONNX_MODEL = {
     inputAlignment: 2,
     fixedInputWidth: 0,
     fixedInputHeight: 0,
-    maxSinglePassPixels: 900000,
-    maxForegroundPixels: 1600000,
+    maxSinglePassPixels: 262144,
+    maxForegroundPixels: 262144,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 512
+    maxTileEdgePixels: 256
 };
 
 const DEFAULT_ONNX_MODEL_KEY = REALESRGAN_2XPLUS_ONNX_MODEL.key;

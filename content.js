@@ -1,3 +1,16 @@
+// Flush ONNX GPU VRAM when tab is hidden (switch away)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        if (typeof window.resetOnnxAdapterState === 'function') {
+            try {
+                window.resetOnnxAdapterState();
+                window.MangaScalerLog?.('onnx:vram-flush', { reason: 'tab-hidden' });
+            } catch (err) {
+                window.MangaScalerLog?.('onnx:vram-flush-error', { error: String(err) });
+            }
+        }
+    }
+});
 // Bootstrap entrypoint: logger setup and CSS injection
 
 const DEBUG = false;
