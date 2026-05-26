@@ -2,5 +2,8 @@
   "dependencies": {
     "anime4k-webgpu": "^1.0.0",
     "onnxruntime-web": "^1.26.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

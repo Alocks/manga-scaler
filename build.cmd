@@ -30,7 +30,7 @@ if exist "%TMP_DIR%" (
     goto :fail
   )
 )
-mkdir "%DIST_DIR%" || goto :fail
+mkdir "%DIST_DIR%" || goto :fai
 
 echo [build] Installing anime4k-webgpu...
 call npm install anime4k-webgpu || goto :fail
@@ -55,14 +55,23 @@ for %%F in (manifest.json content.js popup.html popup.js rules.json LICENSE) do 
 )
 copy /y src\runtime\runtime.bundle.js "%PAYLOAD_DIR%\src\runtime\runtime.bundle.js" >nul || goto :fail
 
+rem Copy all models
+mkdir "%PAYLOAD_DIR%\models" || goto :fail
+copy /y models\* "%PAYLOAD_DIR%\models\" >nul || goto :fail
+
 mkdir "%PAYLOAD_DIR%\node_modules\anime4k-webgpu\lib" || goto :fail
 robocopy node_modules\anime4k-webgpu\lib "%PAYLOAD_DIR%\node_modules\anime4k-webgpu\lib" /E /NFL /NDL /NJH /NJS /NC /NS >nul
 if errorlevel 8 goto :fail
+
+rem Add onnxruntime-web
+mkdir "%PAYLOAD_DIR%\node_modules\onnxruntime-web\dist" || goto :fail
+copy /y "node_modules\onnxruntime-web\dist\ort.all.min.js" "%PAYLOAD_DIR%\node_modules\onnxruntime-web\dist\ort.all.min.js" >nul || goto :fail
 
 mkdir "%PAYLOAD_DIR%\node_modules\anime4k-webgl" || goto :fail
 copy /y "%ANIME4K_SRC_DIR%\dist\anime4k.js" "%PAYLOAD_DIR%\node_modules\anime4k-webgl\anime4k.js" >nul || goto :fail
 
 echo [build] Verifying required payload files...
+
 for %%F in (
   "manifest.json"
   "LICENSE"
@@ -73,6 +82,13 @@ for %%F in (
   "src\runtime\runtime.bundle.js"
   "node_modules\anime4k-webgpu\lib\index.js"
   "node_modules\anime4k-webgl\anime4k.js"
+  "node_modules\onnxruntime-web\dist\ort.all.min.js"
+  "models\realesr-general-x4v3.onnx"
+  "models\realesr-general-x4v3.onnx.data"
+  "models\up2x-latest-conservative.onnx"
+  "models\up2x-latest-conservative.onnx.data"
+  "models\up2x-latest-denoise1x.onnx"
+  "models\up2x-latest-denoise1x.onnx.data"
 ) do (
   if not exist "%PAYLOAD_DIR%\%%~F" goto :missing_payload
 )

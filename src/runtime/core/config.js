@@ -18,7 +18,6 @@ const WEBGPU_MODEL_VALUES = new Set([
 const WEBGPU_SCALE_VALUES = new Set([2, 3, 4]);
 const ONNX_MODEL_VALUES = new Set([
     'realesrgan-2xplus',
-    'realesr-general-x4v3',
     'up2x-latest-conservative',
     'up2x-latest-denoise1x'
 ]);

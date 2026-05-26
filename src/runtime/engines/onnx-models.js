@@ -38,27 +38,6 @@ const REALESRGAN_2XPLUS_ONNX_MODEL = {
     maxTileEdgePixels: 256
 };
 
-const REALESRGAN_GENEREAL_X4_V3_ONNX_MODEL = {
-    key: 'realesr-general-x4v3',
-    title: 'RealESR General x4 v3',
-    label: 'REALESRGAN_GENEREAL_X4_V3_ONNX',
-    modelPath: 'models/realesr-general-x4v3.onnx',
-    externalDataPath: 'models/realesr-general-x4v3.onnx.data',
-    externalDataPathAliases: [
-        'realesr-general-x4v3.onnx.data',
-        'realesr-general-x4v3_dynamic.onnx.data'
-    ],
-    cacheSchemaVersion: 'v2',
-    inputAlignment: 2,
-    fixedInputWidth: 0,
-    fixedInputHeight: 0,
-    maxSinglePassPixels: 262144,
-    maxForegroundPixels: 262144,
-    tileOverlapPixels: 16,
-    minTileEdgePixels: 128,
-    maxTileEdgePixels: 256
-};
-
 const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
     key: 'up2x-latest-conservative',
     title: 'RealCUGAN Conservative',

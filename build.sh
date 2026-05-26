@@ -64,8 +64,15 @@ cp src/runtime/runtime.bundle.js "$PAYLOAD_DIR/src/runtime/runtime.bundle.js"
 mkdir -p "$PAYLOAD_DIR/node_modules/anime4k-webgpu/lib"
 cp -R node_modules/anime4k-webgpu/lib/. "$PAYLOAD_DIR/node_modules/anime4k-webgpu/lib/"
 
+mkdir -p "$PAYLOAD_DIR/models"
+cp models/* "$PAYLOAD_DIR/models/"
+
 mkdir -p "$PAYLOAD_DIR/node_modules/anime4k-webgl"
+
 cp "$ANIME4K_SRC_DIR/dist/anime4k.js" "$PAYLOAD_DIR/node_modules/anime4k-webgl/anime4k.js"
+
+mkdir -p "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist"
+cp node_modules/onnxruntime-web/dist/ort.all.min.js "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort.all.min.js"
 
 echo "[build] Verifying required payload files..."
 required_files=(
@@ -78,6 +85,13 @@ required_files=(
   "$PAYLOAD_DIR/src/runtime/runtime.bundle.js"
   "$PAYLOAD_DIR/node_modules/anime4k-webgpu/lib/index.js"
   "$PAYLOAD_DIR/node_modules/anime4k-webgl/anime4k.js"
+  "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort.all.min.js"
+  "$PAYLOAD_DIR/models/RealESRGAN_x2plus.onnx"
+  "$PAYLOAD_DIR/models/RealESRGAN_x2plus.onnx.data"
+  "$PAYLOAD_DIR/models/up2x-latest-conservative.onnx"
+  "$PAYLOAD_DIR/models/up2x-latest-conservative.onnx.data"
+  "$PAYLOAD_DIR/models/up2x-latest-denoise1x.onnx"
+  "$PAYLOAD_DIR/models/up2x-latest-denoise1x.onnx.data"
 )
 
 for file in "${required_files[@]}"; do

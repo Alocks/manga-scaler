@@ -68,6 +68,7 @@ jobs:
           cp popup.js extension_root/
           cp rules.json extension_root/
           cp LICENSE extension_root/
+
           cp src/runtime/runtime.bundle.js extension_root/src/runtime/runtime.bundle.js
 
           mkdir -p extension_root/node_modules/anime4k-webgpu/lib
@@ -75,6 +76,13 @@ jobs:
 
           mkdir -p extension_root/node_modules/anime4k-webgl
           cp temp_anime4k/dist/anime4k.js extension_root/node_modules/anime4k-webgl/anime4k.js
+
+          mkdir -p extension_root/node_modules/onnxruntime-web/dist
+          cp node_modules/onnxruntime-web/dist/ort.all.min.js extension_root/node_modules/onnxruntime-web/dist/ort.all.min.js
+
+          mkdir -p extension_root/models
+          cp models/* extension_root/models/
+
           rm -rf temp_anime4k
 
       - name: Verify payload only contains required files
@@ -89,6 +97,13 @@ jobs:
           test -f extension_root/src/runtime/runtime.bundle.js
           test -f extension_root/node_modules/anime4k-webgpu/lib/index.js
           test -f extension_root/node_modules/anime4k-webgl/anime4k.js
+          test -f extension_root/node_modules/onnxruntime-web/dist/ort.all.min.js
+          test -f extension_root/models/RealESRGAN_x2plus.onnx
+          test -f extension_root/models/RealESRGAN_x2plus.onnx.data
+          test -f extension_root/models/up2x-latest-conservative.onnx
+          test -f extension_root/models/up2x-latest-conservative.onnx.data
+          test -f extension_root/models/up2x-latest-denoise1x.onnx
+          test -f extension_root/models/up2x-latest-denoise1x.onnx.data
           test ! -f extension_root/node_modules/anime4k-webgpu/package.json
           test ! -f extension_root/node_modules/anime4k-webgpu/README.md
 
