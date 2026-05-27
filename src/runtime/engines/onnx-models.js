@@ -107,6 +107,24 @@ const ANIMESHARP_V2_RPLKSR_ONNX_MODEL = {
     maxTileEdgePixels: 464
 };
 
+const REALESR_ANIMEVIDEO_V3_ONNX_MODEL = {
+    key: 'realesr-animevideov3',
+    title: 'RealESR AnimeVideo v3',
+    label: 'REALESR_ANIMEVIDEO_V3_ONNX',
+    modelPath: 'models/realesr-animevideov3.onnx',
+    externalDataPath: null,
+    externalDataPathAliases: [],
+    cacheSchemaVersion: 'v1',
+    inputAlignment: 2,
+    fixedInputWidth: 0,
+    fixedInputHeight: 0,
+    maxSinglePassPixels: 1048576,
+    maxForegroundPixels: 3145728,
+    tileOverlapPixels: 16,
+    minTileEdgePixels: 128,
+    maxTileEdgePixels: 464
+};
+
 const MANGAJANAI_1200P_V1_ONNX_MODEL = {
     key: 'mangajanai-1200p-v1',
     title: 'MangaJaNai 2x 1200p V1',
@@ -114,13 +132,15 @@ const MANGAJANAI_1200P_V1_ONNX_MODEL = {
     modelPath: 'models/2x_MangaJaNai_1200p_V1_ESRGAN_70k.onnx',
     externalDataPath: null,
     externalDataPathAliases: [],
-    cacheSchemaVersion: 'v2',  // dynamic axes  Ere-export required
+    // Bump cache schema when model bytes are regenerated (fusion/pruning) to avoid stale IndexedDB artifacts.
+    cacheSchemaVersion: 'v3',
     inputAlignment: 2,
     fixedInputWidth: 0,
     fixedInputHeight: 0,
     maxSinglePassPixels: 1048576,
     maxForegroundPixels: 3145728,
-    tileOverlapPixels: 16,
+    // Aggressive profile: lower overlap reduces duplicated border compute per tile.
+    tileOverlapPixels: 8,
     minTileEdgePixels: 128,
     maxTileEdgePixels: 464
 };
@@ -133,7 +153,8 @@ const ONNX_MODEL_REGISTRY = Object.freeze({
     [UP2X_LATEST_DENOISE1X_ONNX_MODEL.key]: Object.freeze(UP2X_LATEST_DENOISE1X_ONNX_MODEL),
     [MANGAJANAI_1200P_V1_ONNX_MODEL.key]: Object.freeze(MANGAJANAI_1200P_V1_ONNX_MODEL),
     [ANIMESHARP_V2_MOSR_ONNX_MODEL.key]: Object.freeze(ANIMESHARP_V2_MOSR_ONNX_MODEL),
-    [ANIMESHARP_V2_RPLKSR_ONNX_MODEL.key]: Object.freeze(ANIMESHARP_V2_RPLKSR_ONNX_MODEL)
+    [ANIMESHARP_V2_RPLKSR_ONNX_MODEL.key]: Object.freeze(ANIMESHARP_V2_RPLKSR_ONNX_MODEL),
+    [REALESR_ANIMEVIDEO_V3_ONNX_MODEL.key]: Object.freeze(REALESR_ANIMEVIDEO_V3_ONNX_MODEL)
 });
 
 function normalizeOnnxModelKey(value) {

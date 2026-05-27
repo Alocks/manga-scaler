@@ -42,6 +42,7 @@ const ONNX_CACHE_DB_NAME = 'manga-scaler-onnx-artifacts';
 const ONNX_CACHE_STORE_NAME = 'artifacts';
 const ONNX_TILE_YIELD_MS = 0;
 const ONNX_TILE_YIELD_EVERY_TILES = 4;
+const ONNX_INIT_WARMUP_TILE_EDGE_MAX = 512;
 const ONNX_MODEL_SWITCH_FALLBACK_KEY = 'realesrgan-2xplus';
 let onnxCacheDbPromise = null;
 let activeOnnxModelKey = null;
@@ -501,6 +502,11 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
             const externalDataBuffer = artifacts.externalDataBytes
                 ? cloneTypedArrayForTransfer(artifacts.externalDataBytes)
                 : null;
+            const runtimeTileEdge = resolveOnnxTileEdgePixels();
+            const initTileEdge = Math.max(
+                onnxActiveModel.minTileEdgePixels,
+                Math.min(runtimeTileEdge, ONNX_INIT_WARMUP_TILE_EDGE_MAX)
+            );
 
             runtimeLog('onnx:worker-init-dispatch', {
                 lane: normalizedLane,
@@ -508,6 +514,8 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
                 modelBytes: artifacts.modelBytes.byteLength,
                 externalDataBytes: artifacts.externalDataBytes ? artifacts.externalDataBytes.byteLength : 0,
                 modelCacheHit: artifacts.modelCacheHit,
+                runtimeTileEdge,
+                initTileEdge,
                 externalDataCacheHit: artifacts.externalDataCacheHit
             });
 
@@ -527,7 +535,12 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
                 externalDataPathAliases: onnxActiveModel.externalDataPathAliases,
                 modelBytes: modelBuffer,
                 externalDataBytes: externalDataBuffer,
-                onnxProfilingEnabled: !!window.MangaScalerProfiling?.isOnnxEnabled?.()
+                onnxProfilingEnabled: !!window.MangaScalerProfiling?.isOnnxEnabled?.(),
+                warmupWidth: initTileEdge,
+                warmupHeight: initTileEdge,
+                preferredInputWidth: initTileEdge,
+                preferredInputHeight: initTileEdge,
+                graphCaptureEnabled: false
             }, transferList, normalizedLane);
         }
 
@@ -884,6 +897,38 @@ function yieldOnnxTileLoop() {
     });
 }
 
+function getOnnxOutputColorCorrection() {
+    const modelKey = String(onnxActiveModel?.key || '');
+    if (!modelKey.endsWith('-unet1-only')) {
+        return null;
+    }
+
+    // UNet1-only exports can appear slightly darker than the full UNet1+UNet2 path.
+    // Apply a conservative RGB lift/gain to restore perceived luminance.
+    return {
+        gain: 1.06,
+        lift: 1
+    };
+}
+
+function applyOnnxRgbaColorCorrection(pixelBytes, correction) {
+    if (!(pixelBytes instanceof Uint8ClampedArray) || !correction) {
+        return;
+    }
+
+    const gain = Number(correction.gain);
+    const lift = Number(correction.lift);
+    if (!Number.isFinite(gain) || !Number.isFinite(lift)) {
+        return;
+    }
+
+    for (let index = 0; index < pixelBytes.length; index += 4) {
+        pixelBytes[index] = Math.max(0, Math.min(255, Math.round(pixelBytes[index] * gain + lift)));
+        pixelBytes[index + 1] = Math.max(0, Math.min(255, Math.round(pixelBytes[index + 1] * gain + lift)));
+        pixelBytes[index + 2] = Math.max(0, Math.min(255, Math.round(pixelBytes[index + 2] * gain + lift)));
+    }
+}
+
 async function imageToOnnxWorkerInput(image) {
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
@@ -932,7 +977,13 @@ function drawOnnxWorkerOutputToCanvas(workerResult, canvas, cropWidth, cropHeigh
         throw new Error('Failed to acquire output canvas context for ONNX Runtime');
     }
 
-    const imageData = new ImageData(new Uint8ClampedArray(rgbaBuffer), outWidth, outHeight);
+    const outputPixels = new Uint8ClampedArray(rgbaBuffer);
+    const colorCorrection = getOnnxOutputColorCorrection();
+    if (colorCorrection) {
+        applyOnnxRgbaColorCorrection(outputPixels, colorCorrection);
+    }
+
+    const imageData = new ImageData(outputPixels, outWidth, outHeight);
     ctx.putImageData(imageData, 0, 0, 0, 0, finalWidth, finalHeight);
 }
 

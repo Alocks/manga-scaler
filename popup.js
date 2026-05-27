@@ -13,8 +13,37 @@ const FALLBACK_ONNX_MODEL_OPTIONS = [
   { key: 'realesrgan-2xplus', title: 'RealESRGAN 2x+' },
   { key: 'realesr-general-x4v3', title: 'RealESR General x4 v3' }
 ];
+const ONNX_MODEL_HINTS = {
+  'realesrgan-2xplus': {
+    speed: 'Speed: Slow',
+    quality: 'Quality: High'
+  },
+  'realesr-animevideov3': {
+    speed: 'Speed: Very Fast',
+    quality: 'Quality: Medium'
+  },
+  'up2x-latest-conservative': {
+    speed: 'Speed: Medium',
+    quality: 'Quality: High'
+  },
+  'up2x-latest-denoise1x': {
+    speed: 'Speed: Medium',
+    quality: 'Quality: High'
+  },
+  'mangajanai-1200p-v1': {
+    speed: 'Speed: Slow',
+    quality: 'Quality: Very High'
+  },
+  'animesharp-v2-mosr-sharp': {
+    speed: 'Speed: Slow',
+    quality: 'Quality: Medium'
+  },
+  'animesharp-v2-rplksr-sharp': {
+    speed: 'Speed: Slow',
+    quality: 'Quality: High'
+  }
+};
 const CLEAR_CACHE_MESSAGE_TYPE = 'manga-scaler:clear-cache';
-const GET_DIAGNOSTICS_MESSAGE_TYPE = 'manga-scaler:get-diagnostics';
 const SUPPORTED_TAB_URL_PATTERNS = [
   /^https?:\/\/(?:[^/]+\.)?nhentai\.net\//i,
   /^https?:\/\/(?:[^/]+\.)?comix\.to\//i,
@@ -22,14 +51,12 @@ const SUPPORTED_TAB_URL_PATTERNS = [
 ];
 const POPUP_MESSAGE_TIMEOUT_MS = 5000;
 let isWebGpuSupported = true;
-let diagnosticsRefreshTimer = null;
-let diagnosticsFollowUpTimer = null;
 
 const clearCacheButton = document.getElementById('clearCacheButton');
 const cacheActionStatus = document.getElementById('cacheActionStatus');
-const runtimeDiagnostics = document.getElementById('runtimeDiagnostics');
+const shaderBackendSelect = document.getElementById('shaderBackend');
 const webgpuScaleSelect = document.getElementById('webgpuScale');
-const onnxModelSelect = document.getElementById('onnxModel');
+const onnxModelList = document.getElementById('onnxModelList');
 
 function getPopupOnnxModelOptions() {
   if (typeof globalThis.getOnnxModelOptions === 'function') {
@@ -52,22 +79,49 @@ function normalizeOnnxModel(value) {
 }
 
 function buildOnnxModelSelectOptions(selectedValue = DEFAULT_ONNX_MODEL) {
-  if (!onnxModelSelect) return;
+  if (!onnxModelList) return;
 
   const normalizedSelected = normalizeOnnxModel(selectedValue);
-  const options = getPopupOnnxModelOptions();
+  const options = getPopupOnnxModelOptions().slice().sort((a, b) => {
+    return String(a.title || a.label || a.key).localeCompare(String(b.title || b.label || b.key));
+  });
 
-  onnxModelSelect.textContent = '';
+  onnxModelList.textContent = '';
 
   for (const option of options) {
     if (!option?.key) continue;
-    const element = document.createElement('option');
-    element.value = option.key;
-    element.textContent = option.title || option.label || option.key;
-    onnxModelSelect.appendChild(element);
-  }
+    const hint = ONNX_MODEL_HINTS[option.key] || {
+      speed: 'Speed: Medium',
+      quality: 'Quality: Medium'
+    };
 
-  onnxModelSelect.value = normalizedSelected;
+    const modelRow = document.createElement('div');
+    modelRow.className = 'onnx-model-row';
+
+    const row = document.createElement('label');
+    row.className = 'preset-option';
+
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'onnxModel';
+    input.value = option.key;
+    input.checked = option.key === normalizedSelected;
+
+    const text = document.createElement('span');
+    text.className = 'preset-label';
+    text.textContent = option.title || option.label || option.key;
+
+    row.appendChild(input);
+    row.appendChild(text);
+
+    const desc = document.createElement('div');
+    desc.className = 'onnx-model-desc';
+    desc.textContent = `${hint.speed} | ${hint.quality}`;
+
+    modelRow.appendChild(row);
+    modelRow.appendChild(desc);
+    onnxModelList.appendChild(modelRow);
+  }
 }
 
 function normalizeWebGpuScale(value) {
@@ -88,32 +142,8 @@ function isSupportedMangaTab(tab) {
   return typeof tab?.url === 'string' && SUPPORTED_TAB_URL_PATTERNS.some((pattern) => pattern.test(tab.url));
 }
 
-function setRuntimeDiagnosticsText(text) {
-  if (!runtimeDiagnostics) return;
-  runtimeDiagnostics.textContent = text;
-}
-
-function scheduleRuntimeDiagnosticsRefresh() {
-  if (diagnosticsRefreshTimer !== null) {
-    clearTimeout(diagnosticsRefreshTimer);
-  }
-  diagnosticsRefreshTimer = window.setTimeout(() => {
-    diagnosticsRefreshTimer = null;
-    refreshRuntimeDiagnostics();
-  }, 60);
-
-  if (diagnosticsFollowUpTimer !== null) {
-    clearTimeout(diagnosticsFollowUpTimer);
-  }
-  diagnosticsFollowUpTimer = window.setTimeout(() => {
-    diagnosticsFollowUpTimer = null;
-    refreshRuntimeDiagnostics();
-  }, 360);
-}
-
 async function persistSettingAndRefresh(patch) {
   await chrome.storage.sync.set(patch);
-  scheduleRuntimeDiagnosticsRefresh();
 }
 
 async function sendMessageWithTimeout(tabId, payload, timeoutMs = POPUP_MESSAGE_TIMEOUT_MS) {
@@ -132,56 +162,6 @@ async function sendMessageWithTimeout(tabId, payload, timeoutMs = POPUP_MESSAGE_
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
-  }
-}
-
-function formatRuntimeDiagnostics(diagnostics) {
-  if (!diagnostics || typeof diagnostics !== 'object') {
-    return 'Diagnostics unavailable.';
-  }
-
-  const prefs = diagnostics.preferences || {};
-  const hooks = diagnostics.hooks || {};
-  const queue = diagnostics.queue || {};
-  const adapters = diagnostics.adapters || {};
-  const generatedAt = Number.isFinite(diagnostics.generatedAt) ? new Date(diagnostics.generatedAt).toLocaleTimeString() : 'unknown';
-  const pageUrl = diagnostics.pageUrl || 'unknown';
-
-  return [
-    `Snapshot: ${generatedAt}`,
-    `Page: ${pageUrl}`,
-    `Backend: ${prefs.selectedEngineBackend || 'unknown'} (effective: ${diagnostics.effectiveBackend || 'unknown'})`,
-    `Preset: ${prefs.selectedSimplePreset || 'unknown'} | WebGPU model: ${prefs.selectedWebGpuModel || 'unknown'} | WebGPU scale: ${prefs.selectedWebGpuScale || DEFAULT_WEBGPU_SCALE}x`,
-    `ONNX model: ${prefs.selectedOnnxModel || DEFAULT_ONNX_MODEL}`,
-    `Route: ${diagnostics.readerRoute ? 'reader' : 'non-reader'} | Foreground: ${diagnostics.foreground ? 'yes' : 'no'}`,
-    `Hooks - fetch: ${hooks.fetch ? 'ok' : 'missing'}, image-src: ${hooks.imageSrc ? 'ok' : 'missing'}, Image(): ${hooks.imageConstructor ? 'ok' : 'missing'}`,
-    `Adapters - WebGL: capable=${adapters.webgl?.capable ? 'yes' : 'no'}, initialized=${adapters.webgl?.initialized ? 'yes' : 'no'}, supported=${adapters.webgl?.isSupported ? 'yes' : 'no'}`,
-    `Adapters - WebGPU: capable=${adapters.webgpu?.capable ? 'yes' : 'no'}, initialized=${adapters.webgpu?.initialized ? 'yes' : 'no'}, supported=${adapters.webgpu?.isSupported ? 'yes' : 'no'}`,
-    `Adapters - ONNX: capable=${adapters.onnx?.capable ? 'yes' : 'no'}, initialized=${adapters.onnx?.initialized ? 'yes' : 'no'}, supported=${adapters.onnx?.isSupported ? 'yes' : 'no'}`,
-    `Queue - size: ${queue.size ?? 0}, in-flight: ${queue.inFlightCount ?? 0}, processed: ${queue.processedCount ?? 0}`
-  ].join('\n');
-}
-
-async function refreshRuntimeDiagnostics() {
-  const activeTab = await getActiveTab();
-  if (!activeTab?.id || !isSupportedMangaTab(activeTab)) {
-    setRuntimeDiagnosticsText('Open a supported manga tab to view runtime diagnostics.');
-    return;
-  }
-
-  try {
-    const response = await sendMessageWithTimeout(activeTab.id, { type: GET_DIAGNOSTICS_MESSAGE_TYPE });
-    if (!response?.ok) {
-      throw new Error(response?.error || 'Diagnostics request failed');
-    }
-    setRuntimeDiagnosticsText(formatRuntimeDiagnostics(response.diagnostics));
-  } catch (error) {
-    const message = String(error?.message || 'Diagnostics unavailable');
-    setRuntimeDiagnosticsText(
-      message.includes('Receiving end does not exist')
-        ? 'Runtime not ready in this tab yet. Reload the manga page.'
-        : `Diagnostics unavailable: ${message}`
-    );
   }
 }
 
@@ -224,11 +204,11 @@ async function detectWebGpuSupport() {
 }
 
 function applyWebGpuAvailabilityUi(supported) {
-  const webgpuTab = document.querySelector('.tab-pill[data-tab="webgpu"]');
-  if (webgpuTab) {
-    webgpuTab.classList.toggle('disabled', !supported);
-    webgpuTab.setAttribute('aria-disabled', String(!supported));
-    webgpuTab.title = supported ? '' : 'WebGPU is not supported by this browser';
+  if (shaderBackendSelect) {
+    const webgpuOption = shaderBackendSelect.querySelector('option[value="webgpu"]');
+    if (webgpuOption) {
+      webgpuOption.disabled = !supported;
+    }
   }
 
   document.querySelectorAll('input[name="webgpuModel"]').forEach((input) => {
@@ -242,18 +222,36 @@ function applyWebGpuAvailabilityUi(supported) {
   }
 }
 
+function setActiveShaderBackendPanel(backend) {
+  const normalizedBackend = backend === 'webgpu' ? 'webgpu' : 'webgl';
+  document.querySelectorAll('.shader-backend-panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === `shaderBackendPanel-${normalizedBackend}`);
+  });
+
+  if (shaderBackendSelect) {
+    shaderBackendSelect.value = normalizedBackend;
+  }
+}
+
 function setActiveEnginePanel(backend) {
   const normalizedBackend = String(backend || DEFAULT_ENGINE_BACKEND).toLowerCase();
+  const isShaderBackend = normalizedBackend === 'webgl' || normalizedBackend === 'webgpu';
+  const activePanelId = isShaderBackend ? 'enginePanel-shaders' : `enginePanel-${normalizedBackend}`;
+  const activeTabKey = isShaderBackend ? 'shaders' : normalizedBackend;
   const panels = document.querySelectorAll('.engine-panel');
   const tabs = document.querySelectorAll('.tab-pill');
 
   panels.forEach((panel) => {
-    panel.classList.toggle('active', panel.id === `enginePanel-${normalizedBackend}`);
+    panel.classList.toggle('active', panel.id === activePanelId);
   });
 
   tabs.forEach((tab) => {
-    tab.classList.toggle('active', tab.dataset.tab === normalizedBackend);
+    tab.classList.toggle('active', tab.dataset.tab === activeTabKey);
   });
+
+  if (isShaderBackend) {
+    setActiveShaderBackendPanel(normalizedBackend);
+  }
 }
 
 async function loadCurrentSettings() {
@@ -276,6 +274,10 @@ async function loadCurrentSettings() {
   if (!isWebGpuSupported && currentBackend === 'webgpu') {
     currentBackend = 'webgl';
     chrome.storage.sync.set({ [ENGINE_BACKEND_KEY]: currentBackend });
+  }
+
+  if (shaderBackendSelect) {
+    shaderBackendSelect.value = currentBackend === 'webgpu' ? 'webgpu' : 'webgl';
   }
 
   const presetRadio = document.querySelector(`input[name="preset"][value="${currentPreset}"]`);
@@ -304,14 +306,35 @@ document.querySelectorAll('input[name="preset"]').forEach((radio) => {
 
 document.querySelectorAll('.tab-pill').forEach((tab) => {
   tab.addEventListener('click', async () => {
-    const backend = String(tab.dataset.tab || DEFAULT_ENGINE_BACKEND).toLowerCase();
-    if (backend === 'webgpu' && !isWebGpuSupported) {
-      return;
+    const tabKey = String(tab.dataset.tab || 'shaders').toLowerCase();
+    let backend = tabKey;
+
+    if (tabKey === 'shaders') {
+      const selectedShaderBackend = shaderBackendSelect?.value === 'webgpu' ? 'webgpu' : 'webgl';
+      if (!isWebGpuSupported && selectedShaderBackend === 'webgpu') {
+        backend = 'webgl';
+      } else {
+        backend = selectedShaderBackend;
+      }
     }
+
     setActiveEnginePanel(backend);
     await persistSettingAndRefresh({ [ENGINE_BACKEND_KEY]: backend });
   });
 });
+
+if (shaderBackendSelect) {
+  shaderBackendSelect.addEventListener('change', async (event) => {
+    let backend = String(event.target?.value || 'webgl').toLowerCase();
+    if (!isWebGpuSupported && backend === 'webgpu') {
+      backend = 'webgl';
+      shaderBackendSelect.value = 'webgl';
+    }
+
+    setActiveEnginePanel(backend);
+    await persistSettingAndRefresh({ [ENGINE_BACKEND_KEY]: backend });
+  });
+}
 
 document.querySelectorAll('input[name="webgpuModel"]').forEach((radio) => {
   radio.addEventListener('change', async (e) => {
@@ -329,10 +352,12 @@ if (webgpuScaleSelect) {
   });
 }
 
-if (onnxModelSelect) {
-  onnxModelSelect.addEventListener('change', async (event) => {
-    const nextModel = normalizeOnnxModel(event.target?.value);
-    onnxModelSelect.value = nextModel;
+if (onnxModelList) {
+  onnxModelList.addEventListener('change', async (event) => {
+    const target = event.target;
+    if (!target || target.name !== 'onnxModel' || !target.checked) return;
+
+    const nextModel = normalizeOnnxModel(target.value);
     await persistSettingAndRefresh({ [ONNX_MODEL_KEY]: nextModel });
   });
 }
@@ -340,24 +365,14 @@ if (onnxModelSelect) {
 if (chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync') return;
-    if (changes[ONNX_MODEL_KEY] && onnxModelSelect) {
-      onnxModelSelect.value = normalizeOnnxModel(changes[ONNX_MODEL_KEY].newValue);
-    }
-    if (
-      changes[SIMPLE_PRESET_KEY] ||
-      changes[ENGINE_BACKEND_KEY] ||
-      changes[WEBGPU_MODEL_KEY] ||
-      changes[WEBGPU_SCALE_KEY] ||
-      changes[ONNX_MODEL_KEY]
-    ) {
-      scheduleRuntimeDiagnosticsRefresh();
+    if (changes[ONNX_MODEL_KEY] && onnxModelList) {
+      buildOnnxModelSelectOptions(changes[ONNX_MODEL_KEY].newValue);
     }
   });
 }
 
 loadCurrentSettings();
 refreshCacheActionAvailability();
-refreshRuntimeDiagnostics();
 
 if (clearCacheButton) {
   clearCacheButton.addEventListener('click', async () => {
@@ -390,7 +405,6 @@ if (clearCacheButton) {
       );
     } finally {
       refreshCacheActionAvailability();
-      refreshRuntimeDiagnostics();
     }
   });
 }

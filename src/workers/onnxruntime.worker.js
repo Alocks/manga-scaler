@@ -12,6 +12,15 @@ const WORKER_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
 let workerWarnFilterInstalled = false;
 let workerOnnxProfilingEnabled = false;
 let workerActiveGpuProfileCollector = null;
+let workerGraphCaptureEnabled = false;
+let workerGraphCaptureActive = false;
+let workerGraphCaptureFailureReason = null;
+let workerPreferredInputWidth = 0;
+let workerPreferredInputHeight = 0;
+let workerGpuDevice = null;
+let workerGpuInputBuffer = null;
+let workerGpuInputBufferByteLength = 0;
+let workerGpuInputBufferDims = null;
 
 function createWorkerGpuProfileCollector() {
     return {
@@ -138,7 +147,8 @@ function installOrtWarningFilter() {
         if (
             message.includes('VerifyEachNodeIsAssignedToAnEp') ||
             message.includes('session_state.cc:1367') ||
-            message.includes('session_state.cc:1369')
+            message.includes('session_state.cc:1369') ||
+            message.includes('CleanUnusedInitializersAndNodeArgs')
         ) {
             return;
         }
@@ -304,30 +314,177 @@ async function imageBufferToTensor(rgbaBuffer, width, height) {
     return new workerOrt.Tensor('float32', chw, [1, 3, height, width]);
 }
 
-async function imageBitmapToTensor(imageBitmap) {
-    if (
-        workerCanUseBitmapFromImage !== false &&
-        typeof workerOrt?.Tensor?.fromImage === 'function'
-    ) {
-        try {
-            const tensor = await workerOrt.Tensor.fromImage(imageBitmap, {
-                tensorLayout: 'NCHW',
-                tensorFormat: 'RGB',
-                dataType: 'float32'
-            });
-            workerCanUseBitmapFromImage = true;
-            imageBitmap.close();
-            return tensor;
-        } catch (bitmapError) {
-            workerCanUseBitmapFromImage = false;
-            postWorkerLog('onnx:worker-bitmap-fromimage-fallback', { reason: String(bitmapError) });
-        }
+async function tensorFromImageSource(imageSource, width, height, sourceLabel = 'image-source') {
+    if (typeof workerOrt?.Tensor?.fromImage !== 'function') {
+        return null;
     }
 
-    // Fallback: draw to OffscreenCanvas and extract ImageData on the CPU
+    try {
+        return await workerOrt.Tensor.fromImage(imageSource, {
+            tensorLayout: 'NCHW',
+            tensorFormat: 'RGB',
+            dataType: 'float32',
+            resizedWidth: width,
+            resizedHeight: height
+        });
+    } catch (error) {
+        postWorkerLog('onnx:worker-fromimage-source-fallback', {
+            source: sourceLabel,
+            reason: String(error)
+        });
+        return null;
+    }
+}
+
+async function buildWorkerCpuInputTensor(payload, width, height) {
+    if (payload.imageBitmap != null) {
+        return imageBitmapToTensor(payload.imageBitmap);
+    }
+    return imageBufferToTensor(payload.rgbaBuffer, width, height);
+}
+
+function getWorkerImageBitmapRgbaBuffer(imageBitmap, width, height) {
+    // Fallback path for graph-capture input upload: extract RGBA on CPU and then write CHW to a GPU buffer.
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(imageBitmap, 0, 0, width, height);
+    imageBitmap.close();
+    const imageData = ctx.getImageData(0, 0, width, height);
+    return imageData.data.buffer;
+}
+
+function ensureWorkerGpuInputBuffer(byteLength, dims) {
+    if (!workerGpuDevice || typeof workerGpuDevice.createBuffer !== 'function') {
+        return null;
+    }
+
+    if (
+        workerGpuInputBuffer &&
+        workerGpuInputBufferByteLength === byteLength &&
+        workerGpuInputBufferDims &&
+        workerGpuInputBufferDims.width === dims.width &&
+        workerGpuInputBufferDims.height === dims.height
+    ) {
+        return workerGpuInputBuffer;
+    }
+
+    if (workerGpuInputBuffer && typeof workerGpuInputBuffer.destroy === 'function') {
+        workerGpuInputBuffer.destroy();
+    }
+
+    const gpuBufferUsage = self.GPUBufferUsage || {};
+    const usageFlags = (gpuBufferUsage.COPY_DST || 0x0008) | (gpuBufferUsage.STORAGE || 0x0080);
+
+    workerGpuInputBuffer = workerGpuDevice.createBuffer({
+        size: byteLength,
+        usage: usageFlags
+    });
+    workerGpuInputBufferByteLength = byteLength;
+    workerGpuInputBufferDims = { ...dims };
+    return workerGpuInputBuffer;
+}
+
+async function tryBuildWorkerGpuInputTensor(payload, width, height, expectedTensorType) {
+    if (!workerGraphCaptureEnabled || !workerGraphCaptureActive) {
+        return null;
+    }
+
+    if (expectedTensorType === 'float16') {
+        return null;
+    }
+
+    if (
+        !Number.isFinite(workerPreferredInputWidth) ||
+        !Number.isFinite(workerPreferredInputHeight) ||
+        workerPreferredInputWidth < 1 ||
+        workerPreferredInputHeight < 1
+    ) {
+        return null;
+    }
+
+    if (width !== workerPreferredInputWidth || height !== workerPreferredInputHeight) {
+        return null;
+    }
+
+    if (typeof workerOrt?.Tensor?.fromGpuBuffer !== 'function') {
+        workerGraphCaptureActive = false;
+        workerGraphCaptureFailureReason = 'Tensor.fromGpuBuffer is unavailable';
+        return null;
+    }
+
+    if (!workerGpuDevice || typeof workerGpuDevice?.queue?.writeBuffer !== 'function') {
+        workerGraphCaptureActive = false;
+        workerGraphCaptureFailureReason = 'WebGPU device queue is unavailable';
+        return null;
+    }
+
+    const pixelCount = width * height;
+    const chw = new Float32Array(pixelCount * 3);
+    let rgbaBuffer = payload.rgbaBuffer;
+
+    if (!(rgbaBuffer instanceof ArrayBuffer) && payload.imageBitmap != null) {
+        rgbaBuffer = getWorkerImageBitmapRgbaBuffer(payload.imageBitmap, width, height);
+        payload.rgbaBuffer = rgbaBuffer;
+        payload.imageBitmap = null;
+    }
+
+    if (!(rgbaBuffer instanceof ArrayBuffer)) {
+        return null;
+    }
+
+    writeImageBufferToChw(rgbaBuffer, width, height, chw, 0);
+    const byteLength = chw.byteLength;
+    const gpuInputBuffer = ensureWorkerGpuInputBuffer(byteLength, { width, height });
+    if (!gpuInputBuffer) {
+        workerGraphCaptureActive = false;
+        workerGraphCaptureFailureReason = 'Failed to allocate reusable WebGPU input buffer';
+        return null;
+    }
+
+    workerGpuDevice.queue.writeBuffer(gpuInputBuffer, 0, chw.buffer, chw.byteOffset, byteLength);
+
+    return workerOrt.Tensor.fromGpuBuffer(gpuInputBuffer, {
+        dims: [1, 3, height, width],
+        dataType: 'float32'
+    });
+}
+
+async function imageBitmapToTensor(imageBitmap) {
+    // Preferred path: hand the ImageBitmap directly to ORT so WebGPU can import texture data.
+    if (workerCanUseBitmapFromImage !== false) {
+        const directTensor = await tensorFromImageSource(
+            imageBitmap,
+            imageBitmap.width,
+            imageBitmap.height,
+            'imageBitmap'
+        );
+        if (directTensor) {
+            workerCanUseBitmapFromImage = true;
+            imageBitmap.close();
+            return directTensor;
+        }
+
+        // Do not permanently disable after a single failure; runtime support can vary by source and frame.
+        workerCanUseBitmapFromImage = null;
+    }
+
+    // Secondary fast path: draw once to OffscreenCanvas and pass canvas directly to Tensor.fromImage.
     const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(imageBitmap, 0, 0);
+
+    const canvasTensor = await tensorFromImageSource(
+        canvas,
+        canvas.width,
+        canvas.height,
+        'offscreenCanvas'
+    );
+    if (canvasTensor) {
+        imageBitmap.close();
+        return canvasTensor;
+    }
+
+    // Last resort: CPU readback + conversion path.
     imageBitmap.close();
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     return imageBufferToTensor(imageData.data.buffer, canvas.width, canvas.height);
@@ -478,9 +635,10 @@ async function runWorkerInferenceBatch(batchEntries) {
     }
 
     const tensorStartAt = getWorkerNow();
-    let inputTensor = payload.imageBitmap != null
-        ? await imageBitmapToTensor(payload.imageBitmap)
-        : await imageBufferToTensor(payload.rgbaBuffer, width, height);
+    let inputTensor = await tryBuildWorkerGpuInputTensor(payload, width, height, session._inferredInputType || 'float32');
+    if (!inputTensor) {
+        inputTensor = await buildWorkerCpuInputTensor(payload, width, height);
+    }
 
     // If this session previously required float16 input, convert eagerly before the run.
     if (session._inferredInputType === 'float16' && inputTensor.type === 'float32') {
@@ -521,8 +679,25 @@ async function runWorkerInferenceBatch(batchEntries) {
             if (errMsg.includes('float16') && inputTensor.type === 'float32') {
                 console.warn('[Manga Scaler] float16 input required — converting and retrying', { errMsg });
                 session._inferredInputType = 'float16';
+
+                // Graph capture in ORT-Web requires stable tensor creation paths and shapes.
+                // If the model expects float16 inputs, fall back to CPU tensor creation.
+                if (workerGraphCaptureActive) {
+                    workerGraphCaptureActive = false;
+                    workerGraphCaptureFailureReason = 'Model requires float16 input tensor';
+                }
+
                 const prevTensor = inputTensor;
-                inputTensor = new workerOrt.Tensor('float16', float32ToFloat16Array(prevTensor.data), prevTensor.dims);
+                const canReusePrevData = prevTensor && prevTensor.data && prevTensor.dims;
+                if (canReusePrevData) {
+                    inputTensor = new workerOrt.Tensor('float16', float32ToFloat16Array(prevTensor.data), prevTensor.dims);
+                } else {
+                    const cpuTensor = await buildWorkerCpuInputTensor(payload, width, height);
+                    inputTensor = new workerOrt.Tensor('float16', float32ToFloat16Array(cpuTensor.data), cpuTensor.dims);
+                    if (typeof cpuTensor.dispose === 'function') {
+                        cpuTensor.dispose();
+                    }
+                }
                 if (typeof prevTensor.dispose === 'function') {
                     prevTensor.dispose();
                 }
@@ -629,9 +804,28 @@ async function ensureWorkerSession(payload) {
             executionProvider: 'webgpu'
         });
 
+        workerPreferredInputWidth = Number.isFinite(payload.preferredInputWidth)
+            ? Math.max(1, Math.floor(payload.preferredInputWidth))
+            : 0;
+        workerPreferredInputHeight = Number.isFinite(payload.preferredInputHeight)
+            ? Math.max(1, Math.floor(payload.preferredInputHeight))
+            : 0;
+        workerGraphCaptureEnabled = payload.graphCaptureEnabled !== false;
+        workerGraphCaptureActive = workerGraphCaptureEnabled;
+        workerGraphCaptureFailureReason = null;
+        workerGpuDevice = null;
+        workerGpuInputBuffer = null;
+        workerGpuInputBufferByteLength = 0;
+        workerGpuInputBufferDims = null;
+
         const sessionOptions = {
-            executionProviders: ['webgpu'],
+            executionProviders: [{
+                name: 'webgpu',
+                preferredLayout: 'NHWC',
+                powerPreference: 'high-performance'
+            }],
             graphOptimizationLevel: 'all',
+            enableGraphCapture: workerGraphCaptureEnabled,
             enableCpuMemArena: false,
             enableMemPattern: false
         };
@@ -644,18 +838,48 @@ async function ensureWorkerSession(payload) {
             }));
         }
 
-        workerSession = await lib.InferenceSession.create(new Uint8Array(payload.modelBytes), sessionOptions);
+        try {
+            workerSession = await lib.InferenceSession.create(new Uint8Array(payload.modelBytes), sessionOptions);
+        } catch (sessionCreateError) {
+            postWorkerLog('onnx:worker-session-create-retry', {
+                reason: String(sessionCreateError),
+                graphCaptureEnabled: workerGraphCaptureEnabled
+            });
+
+            workerGraphCaptureActive = false;
+            workerGraphCaptureFailureReason = String(sessionCreateError);
+
+            const fallbackSessionOptions = {
+                executionProviders: ['webgpu'],
+                graphOptimizationLevel: 'all',
+                enableCpuMemArena: false,
+                enableMemPattern: false
+            };
+            if (sessionOptions.externalData) {
+                fallbackSessionOptions.externalData = sessionOptions.externalData;
+            }
+            workerSession = await lib.InferenceSession.create(new Uint8Array(payload.modelBytes), fallbackSessionOptions);
+        }
+
         payload.modelBytes = null;
         payload.externalDataBytes = null;
         workerProvider = 'webgpu-worker';
 
-        // Warmup: run a tiny inference to pre-compile all WebGPU shaders for this model.
-        // This moves shader compilation cost from the first real tile to session init time.
+        if (workerGraphCaptureActive) {
+            workerGpuDevice = lib?.env?.webgpu?.device || null;
+            if (!workerGpuDevice) {
+                workerGraphCaptureActive = false;
+                workerGraphCaptureFailureReason = 'ORT WebGPU device handle is unavailable after session init';
+            }
+        }
+
+        // Warmup: run a model-size inference to pre-compile shader variants used by real tiles.
         const warmupStartedAt = getWorkerNow();
         try {
             const warmupInputName = workerSession.inputNames?.[0];
             if (warmupInputName) {
-                const wW = 32, wH = 32;
+                const wW = Number.isFinite(payload.warmupWidth) ? Math.max(1, Math.floor(payload.warmupWidth)) : 32;
+                const wH = Number.isFinite(payload.warmupHeight) ? Math.max(1, Math.floor(payload.warmupHeight)) : 32;
                 const warmupTensor = new workerOrt.Tensor('float32', new Float32Array(wW * wH * 3), [1, 3, wH, wW]);
                 const warmupOutputs = await workerSession.run({ [warmupInputName]: warmupTensor });
                 if (typeof warmupTensor.dispose === 'function') warmupTensor.dispose();
@@ -663,7 +887,13 @@ async function ensureWorkerSession(payload) {
                     if (typeof t?.dispose === 'function') t.dispose();
                 }
             }
-            postWorkerLog('onnx:worker-warmup', { durationMs: formatWorkerDurationMs(warmupStartedAt) });
+            postWorkerLog('onnx:worker-warmup', {
+                durationMs: formatWorkerDurationMs(warmupStartedAt),
+                warmupWidth: Number.isFinite(payload.warmupWidth) ? payload.warmupWidth : 32,
+                warmupHeight: Number.isFinite(payload.warmupHeight) ? payload.warmupHeight : 32,
+                graphCaptureActive: workerGraphCaptureActive,
+                graphCaptureFailureReason: workerGraphCaptureFailureReason
+            });
         } catch (warmupErr) {
             postWorkerLog('onnx:worker-warmup-failed', { reason: String(warmupErr) });
         }
@@ -671,6 +901,9 @@ async function ensureWorkerSession(payload) {
         postWorkerLog('onnx:worker-init-success', {
             provider: workerProvider,
             durationMs: formatWorkerDurationMs(startedAt),
+            graphCaptureEnabled: workerGraphCaptureEnabled,
+            graphCaptureActive: workerGraphCaptureActive,
+            graphCaptureFailureReason: workerGraphCaptureFailureReason,
             inputNames: Array.isArray(workerSession?.inputNames) ? workerSession.inputNames : [],
             outputNames: Array.isArray(workerSession?.outputNames) ? workerSession.outputNames : []
         });
