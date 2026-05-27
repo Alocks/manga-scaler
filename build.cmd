@@ -30,10 +30,10 @@ if exist "%TMP_DIR%" (
     goto :fail
   )
 )
-mkdir "%DIST_DIR%" || goto :fai
+mkdir "%DIST_DIR%" || goto :fail
 
-echo [build] Installing anime4k-webgpu...
-call npm install anime4k-webgpu || goto :fail
+echo [build] Installing npm dependencies...
+call npm install || goto :fail
 
 echo [build] Building runtime bundle...
 call node tools\build-runtime-bundle.mjs || goto :fail
@@ -83,14 +83,12 @@ for %%F in (
   "node_modules\anime4k-webgpu\lib\index.js"
   "node_modules\anime4k-webgl\anime4k.js"
   "node_modules\onnxruntime-web\dist\ort.all.min.js"
-  "models\realesr-general-x4v3.onnx"
-  "models\realesr-general-x4v3.onnx.data"
-  "models\up2x-latest-conservative.onnx"
-  "models\up2x-latest-conservative.onnx.data"
-  "models\up2x-latest-denoise1x.onnx"
-  "models\up2x-latest-denoise1x.onnx.data"
 ) do (
   if not exist "%PAYLOAD_DIR%\%%~F" goto :missing_payload
+)
+
+for %%F in (models\*.onnx) do (
+  if not exist "%PAYLOAD_DIR%\models\%%~nxF" goto :missing_payload
 )
 
 echo [build] Creating ZIP artifact...

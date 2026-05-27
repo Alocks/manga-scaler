@@ -42,96 +42,46 @@ jobs:
           echo "should_build=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        if: steps.commit_check.outputs.should_build == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.commit_check.outputs.should_build == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: '24'
 
-      - name: Get anime4K-webgpu package
-        if: steps.commit_check.outputs.should_build == 'true'
-        run: npm install anime4k-webgpu
-
-      - name: Build runtime bundle.js
-        if: steps.commit_check.outputs.should_build == 'true'
-        run: node tools/build-runtime-bundle.mjs
-
-      - name: Build Anime4K.js and prepare minimal extension payload
-        if: steps.commit_check.outputs.should_build == 'true'
+      - name: Enable Yarn via Corepack
+        if: github.event_name == 'workflow_dispatch' || steps.commit_check.outputs.should_build == 'true'
         run: |
-          git clone https://github.com/monyone/Anime4K.js temp_anime4k
-          cd temp_anime4k && yarn install && yarn build
-          cd ..
-          mkdir -p extension_root/src/runtime
-          cp manifest.json extension_root/
-          cp content.js extension_root/
-          cp popup.html extension_root/
-          cp popup.js extension_root/
-          cp rules.json extension_root/
-          cp LICENSE extension_root/
+          corepack enable
+          yarn --version
 
-          cp src/runtime/runtime.bundle.js extension_root/src/runtime/runtime.bundle.js
-
-          mkdir -p extension_root/node_modules/anime4k-webgpu/lib
-          cp -R node_modules/anime4k-webgpu/lib/. extension_root/node_modules/anime4k-webgpu/lib/
-
-          mkdir -p extension_root/node_modules/anime4k-webgl
-          cp temp_anime4k/dist/anime4k.js extension_root/node_modules/anime4k-webgl/anime4k.js
-
-          mkdir -p extension_root/node_modules/onnxruntime-web/dist
-          cp node_modules/onnxruntime-web/dist/ort.all.min.js extension_root/node_modules/onnxruntime-web/dist/ort.all.min.js
-
-          mkdir -p extension_root/models
-          cp models/* extension_root/models/
-
-          rm -rf temp_anime4k
-
-      - name: Verify payload only contains required files
-        if: steps.commit_check.outputs.should_build == 'true'
+      - name: Install Chrome (if missing)
+        if: github.event_name == 'workflow_dispatch' || steps.commit_check.outputs.should_build == 'true'
         run: |
-          test -f extension_root/manifest.json
-          test -f extension_root/LICENSE
-          test -f extension_root/content.js
-          test -f extension_root/popup.html
-          test -f extension_root/popup.js
-          test -f extension_root/rules.json
-          test -f extension_root/src/runtime/runtime.bundle.js
-          test -f extension_root/node_modules/anime4k-webgpu/lib/index.js
-          test -f extension_root/node_modules/anime4k-webgl/anime4k.js
-          test -f extension_root/node_modules/onnxruntime-web/dist/ort.all.min.js
-          test -f extension_root/models/RealESRGAN_x2plus.onnx
-          test -f extension_root/models/RealESRGAN_x2plus.onnx.data
-          test -f extension_root/models/up2x-latest-conservative.onnx
-          test -f extension_root/models/up2x-latest-conservative.onnx.data
-          test -f extension_root/models/up2x-latest-denoise1x.onnx
-          test -f extension_root/models/up2x-latest-denoise1x.onnx.data
-          test ! -f extension_root/node_modules/anime4k-webgpu/package.json
-          test ! -f extension_root/node_modules/anime4k-webgpu/README.md
+          if command -v google-chrome >/dev/null 2>&1; then
+            echo "google-chrome already available"
+            exit 0
+          fi
 
-      - name: Build release ZIP artifact
-        if: steps.commit_check.outputs.should_build == 'true'
-        run: |
-          cd extension_root
-          zip -r ../manga-scaler.zip .
-          cd ..
-          test -f manga-scaler.zip
-
-      - name: Install Chrome
-        if: steps.commit_check.outputs.should_build == 'true'
-        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Pack Extension (CRX)
-        if: steps.commit_check.outputs.should_build == 'true'
+      - name: Build extension artifacts
+        if: github.event_name == 'workflow_dispatch' || steps.commit_check.outputs.should_build == 'true'
         env:
-          EXTENSION_KEY: ${{ secrets.PEM }}
+          CRX_PRIVATE_KEY: ${{ secrets.PEM }}
+        run: bash build.sh
+
+      - name: Verify build artifacts
+        if: github.event_name == 'workflow_dispatch' || steps.commit_check.outputs.should_build == 'true'
         run: |
-          echo "$EXTENSION_KEY" > key.pem
-          google-chrome --headless --pack-extension=extension_root --pack-extension-key=key.pem
-          mv extension_root.crx manga-scaler.crx
+          test -f dist/manga-scaler.zip
+          test -f dist/manga-scaler.crx
 
       - name: Generate release notes
-        if: steps.commit_check.outputs.should_build == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.commit_check.outputs.should_build == 'true'
         id: release_notes
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
@@ -145,13 +95,13 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        if: steps.commit_check.outputs.should_build == 'true' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'workflow_dispatch' || steps.commit_check.outputs.should_build == 'true') && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: "v1.0.${{ github.run_number }}"
           files: |
-            manga-scaler.zip
-            manga-scaler.crx
+            dist/manga-scaler.zip
+            dist/manga-scaler.crx
           body: |
             Build #${{ github.run_number }}
 

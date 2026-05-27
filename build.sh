@@ -40,8 +40,8 @@ fi
 rm -rf "$DIST_DIR" "$TMP_DIR"
 mkdir -p "$DIST_DIR"
 
-echo "[build] Installing anime4k-webgpu..."
-npm install anime4k-webgpu
+echo "[build] Installing npm dependencies..."
+npm install
 
 echo "[build] Building runtime bundle..."
 node tools/build-runtime-bundle.mjs
@@ -86,17 +86,19 @@ required_files=(
   "$PAYLOAD_DIR/node_modules/anime4k-webgpu/lib/index.js"
   "$PAYLOAD_DIR/node_modules/anime4k-webgl/anime4k.js"
   "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort.all.min.js"
-  "$PAYLOAD_DIR/models/RealESRGAN_x2plus.onnx"
-  "$PAYLOAD_DIR/models/RealESRGAN_x2plus.onnx.data"
-  "$PAYLOAD_DIR/models/up2x-latest-conservative.onnx"
-  "$PAYLOAD_DIR/models/up2x-latest-conservative.onnx.data"
-  "$PAYLOAD_DIR/models/up2x-latest-denoise1x.onnx"
-  "$PAYLOAD_DIR/models/up2x-latest-denoise1x.onnx.data"
 )
 
 for file in "${required_files[@]}"; do
   if [[ ! -f "$file" ]]; then
     echo "[build] Missing required file: $file" >&2
+    exit 1
+  fi
+done
+
+for model in models/*.onnx; do
+  model_basename="$(basename "$model")"
+  if [[ ! -f "$PAYLOAD_DIR/models/$model_basename" ]]; then
+    echo "[build] Missing required model in payload: $model_basename" >&2
     exit 1
   fi
 done
