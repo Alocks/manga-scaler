@@ -8,8 +8,12 @@ const queuedSourceUrls = new Set();
 const queuedPageKeyCounts = new Map();
 const seenPerformanceResourceUrls = new Set();
 const BACKGROUND_QUEUE_YIELD_MS = 10;
-const BACKGROUND_QUEUE_MAX_CONCURRENCY = 2;
+const BACKGROUND_QUEUE_MAX_CONCURRENCY = 1;
+const BACKGROUND_QUEUE_KICKOFF_DELAY_MS = 40;
 let backgroundQueueResetVersion = 0;
+let backgroundQueueKickoffTimerId = null;
+let foregroundQueueActiveCount = 0;
+const foregroundQueueIdleWaiters = [];
 
 function isBackgroundQueueRunning() {
     return !!backgroundQueueRunPromise;
@@ -26,9 +30,77 @@ function runQueueTaskSafely(promise, task, extra = {}) {
     });
 }
 
+function waitForInFlightPageKey(pageKey) {
+    return new Promise((resolve) => {
+        function check() {
+            if (!inFlightPageKeys.has(pageKey)) { resolve(); return; }
+            window.setTimeout(check, 50);
+        }
+        check();
+    });
+}
+
+function isForegroundQueueActive() {
+    return foregroundQueueActiveCount > 0;
+}
+
+function markForegroundQueueActive() {
+    foregroundQueueActiveCount += 1;
+}
+
+function markForegroundQueueIdle() {
+    if (foregroundQueueActiveCount > 0) {
+        foregroundQueueActiveCount -= 1;
+    }
+
+    if (foregroundQueueActiveCount === 0) {
+        while (foregroundQueueIdleWaiters.length > 0) {
+            const resolve = foregroundQueueIdleWaiters.shift();
+            if (typeof resolve === 'function') {
+                resolve();
+            }
+        }
+    }
+}
+
+function waitForForegroundQueueIdle() {
+    if (!isForegroundQueueActive()) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+        foregroundQueueIdleWaiters.push(resolve);
+    });
+}
+
+function scheduleBackgroundQueueKickoff() {
+    if (isBackgroundQueueRunning()) return;
+    if (backgroundQueueKickoffTimerId !== null) return;
+    backgroundQueueKickoffTimerId = window.setTimeout(() => {
+        backgroundQueueKickoffTimerId = null;
+        if (!isBackgroundQueueRunning()) {
+            log('bg-queue:kickoff', { queueSize: backgroundQueue.length });
+            runQueueTaskSafely(processBackgroundQueue(), 'process-loop');
+        }
+    }, BACKGROUND_QUEUE_KICKOFF_DELAY_MS);
+}
+
 function resetBackgroundQueueState() {
     backgroundQueueResetVersion++;
     const hasActiveRun = isBackgroundQueueRunning();
+
+    if (backgroundQueueKickoffTimerId !== null) {
+        clearTimeout(backgroundQueueKickoffTimerId);
+        backgroundQueueKickoffTimerId = null;
+    }
+
+    foregroundQueueActiveCount = 0;
+    while (foregroundQueueIdleWaiters.length > 0) {
+        const resolve = foregroundQueueIdleWaiters.shift();
+        if (typeof resolve === 'function') {
+            resolve();
+        }
+    }
 
     processedPageKeys.clear();
     inFlightPageKeys.clear();
@@ -172,10 +244,7 @@ async function preprocessBackgroundImage(sourceUrl) {
     enqueueBackgroundQueueUrl(sourceUrl);
     logQueueEvent('bg-queue:enqueued', sourceUrl);
 
-    if (!isBackgroundQueueRunning()) {
-        log('bg-queue:kickoff', { queueSize: backgroundQueue.length });
-        runQueueTaskSafely(processBackgroundQueue(), 'process-loop');
-    }
+    scheduleBackgroundQueueKickoff();
 }
 
 function getBackgroundExecutionLane(slotIndex) {
@@ -310,7 +379,7 @@ async function processBackgroundQueue() {
         return;
     }
 
-    await Promise.all([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleReadyPromise]);
+    await Promise.all([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleReadyPromise, onnxModelReadyPromise]);
 
     if (runResetVersion !== backgroundQueueResetVersion) {
         log('bg-queue:cancelled', { reason: 'reset-before-start' });
@@ -345,6 +414,14 @@ async function processBackgroundQueue() {
 
         if (!isForegroundTab()) {
             pausedForHiddenTab = true;
+        }
+
+        if (!pausedForHiddenTab && activeTasks.size === 0 && backgroundQueue.length > 0 && isForegroundQueueActive()) {
+            log('bg-queue:waiting-for-foreground', {
+                queueSize: backgroundQueue.length
+            });
+            await waitForForegroundQueueIdle();
+            continue;
         }
 
         while (!pausedForHiddenTab && activeTasks.size < maxConcurrency && backgroundQueue.length > 0) {

@@ -19,7 +19,10 @@ const WEBGPU_SCALE_VALUES = new Set([2, 3, 4]);
 const ONNX_MODEL_VALUES = new Set([
     'realesrgan-2xplus',
     'up2x-latest-conservative',
-    'up2x-latest-denoise1x'
+    'up2x-latest-denoise1x',
+    'mangajanai-1200p-v1',
+    'animesharp-v2-mosr-sharp',
+    'animesharp-v2-rplksr-sharp'
 ]);
 
 let selectedSimplePreset = DEFAULT_SIMPLE_PRESET;

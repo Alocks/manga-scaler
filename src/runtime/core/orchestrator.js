@@ -171,6 +171,16 @@ function isStaleForegroundJob(img, jobId, sourceUrl, parent) {
     );
 }
 
+function getStaleForegroundJobReason(img, jobId, sourceUrl, parent) {
+    if (!isForegroundTab()) return 'hidden-tab';
+    if (!img.isConnected) return 'img-disconnected';
+    if (img.parentElement !== parent) return 'parent-changed';
+    if (img.dataset.aiJobId !== jobId) return 'jobid-changed';
+    const latestSrc = getImageSourceUrl(img);
+    if (latestSrc !== sourceUrl) return 'src-changed';
+    return null;
+}
+
 function getRuntimeDiagnosticsSnapshot() {
     const preferences = getRuntimePreferenceSnapshot();
     let effectiveBackend = 'unknown';
@@ -268,7 +278,7 @@ if (typeof window.Image === 'function' && !window.Image[NH_SCALER_IMAGE_PROXY_MA
 async function processCurrentImage(container) {
     if (!isForegroundTab()) return;
 
-    await Promise.all([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleReadyPromise]);
+    await Promise.all([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleReadyPromise, onnxModelReadyPromise]);
 
     const img = selectForegroundImage(container);
     if (!img) return;
@@ -323,12 +333,27 @@ async function processCurrentImage(container) {
         return;
     }
 
+    // If the background worker is mid-tile on this same page, wait for it instead of
+    // launching a duplicate GPU pass. Once it finishes, serve the result from cache.
+    const pageKeyForInFlight = getSourcePageKey(sourceUrl);
+    if (pageKeyForInFlight && inFlightPageKeys.has(pageKeyForInFlight)) {
+        log('process:wait-for-background', { sourceUrl, pageKey: pageKeyForInFlight });
+        await waitForInFlightPageKey(pageKeyForInFlight);
+        if (!img.isConnected || getImageSourceUrl(img) !== sourceUrl) return;
+        const bgResult = await getProcessedCacheBlob(sourceUrl, runtimeSettings);
+        if (bgResult) {
+            applyProcessedBlobToImage(img, sourceUrl, bgResult);
+        }
+        return;
+    }
+
     if (img.dataset.aiProcessingSrc === sourceUrl) return;
 
     const effectiveBackend = getEffectiveBackend(runtimeSettings);
     const shouldSerializeOnnxSource = effectiveBackend === 'onnx';
     if (shouldSerializeOnnxSource && onnxForegroundSourceLocks.has(sourceUrl)) {
         log('process:skip-inflight-onnx', { sourceUrl, page: getSourcePageNumber(sourceUrl) });
+        console.warn('[NH] process-skipped (already inflight):', sourceUrl.split('/').slice(-2).join('/'));
         return;
     }
 
@@ -337,6 +362,7 @@ async function processCurrentImage(container) {
     img.dataset.aiProcessingSrc = sourceUrl;
     delete img.dataset.aiSkipSource;
     img.dataset.aiProcessed = 'true';
+    markForegroundQueueActive();
     if (shouldSerializeOnnxSource) {
         onnxForegroundSourceLocks.add(sourceUrl);
     }
@@ -344,6 +370,7 @@ async function processCurrentImage(container) {
     if (page == null) {
         log('process:page-missing', { sourceUrl, pageKey: getSourcePageKey(sourceUrl), jobId });
     }
+    console.log(`[NH] process-start job:${jobId} page:${page}`, sourceUrl.split('/').slice(-2).join('/'));
     log('process:start', { sourceUrl, page, jobId, backend: effectiveBackend });
 
     const canvas = document.createElement('canvas');
@@ -376,14 +403,15 @@ async function processCurrentImage(container) {
         }
 
         const latestSrc = getImageSourceUrl(img);
-        if (isStaleForegroundJob(img, jobId, sourceUrl, parent)) {
+        const staleBeforeUpscaleReason = getStaleForegroundJobReason(img, jobId, sourceUrl, parent);
+        if (staleBeforeUpscaleReason) {
             log('process:abort-stale', { sourceUrl, latestSrc, jobId, activeJobId: img.dataset.aiJobId, phase: 'before-upscale' });
             delete img.dataset.aiProcessingSrc;
             return;
         }
 
         const t3 = performance.now();
-        const runInfo = await upscaleWithSelectedBackend(tempImg, canvas, runtimeSettings);
+        const runInfo = await upscaleWithSelectedBackend(tempImg, canvas, runtimeSettings, { page, sourceUrl });
         const t4 = performance.now();
         log('process:upscale-time', {
             sourceUrl,
@@ -395,13 +423,15 @@ async function processCurrentImage(container) {
         });
 
         const latestAfterUpscale = getImageSourceUrl(img);
-        if (isStaleForegroundJob(img, jobId, sourceUrl, parent)) {
+        const staleAfterUpscaleReason = getStaleForegroundJobReason(img, jobId, sourceUrl, parent);
+        if (staleAfterUpscaleReason && staleAfterUpscaleReason !== 'hidden-tab') {
             log('process:abort-stale', {
                 sourceUrl,
                 latestSrc: latestAfterUpscale,
                 jobId,
                 activeJobId: img.dataset.aiJobId,
-                phase: 'after-upscale'
+                phase: 'after-upscale',
+                reason: staleAfterUpscaleReason
             });
             delete img.dataset.aiProcessingSrc;
             return;
@@ -413,20 +443,43 @@ async function processCurrentImage(container) {
 
         const processedBlob = await canvasToBlob(canvas);
 
-        if (isStaleForegroundJob(img, jobId, sourceUrl, parent)) {
+        const staleBeforeCacheWriteReason = getStaleForegroundJobReason(img, jobId, sourceUrl, parent);
+        if (staleBeforeCacheWriteReason && staleBeforeCacheWriteReason !== 'hidden-tab') {
             const latestAfterBlob = getImageSourceUrl(img);
             log('process:abort-stale', {
                 sourceUrl,
                 latestSrc: latestAfterBlob,
                 jobId,
                 activeJobId: img.dataset.aiJobId,
-                phase: 'before-cache-write'
+                phase: 'before-cache-write',
+                reason: staleBeforeCacheWriteReason
             });
             delete img.dataset.aiProcessingSrc;
             return;
         }
 
-        await setProcessedCacheBlob(sourceUrl, processedBlob, runtimeSettings);
+        const cacheWriteOk = await setProcessedCacheBlob(sourceUrl, processedBlob, runtimeSettings);
+        log('process:cache-write', {
+            sourceUrl,
+            page,
+            jobId,
+            ok: !!cacheWriteOk,
+            blobBytes: processedBlob.size
+        });
+
+        const staleBeforeApplyReason = getStaleForegroundJobReason(img, jobId, sourceUrl, parent);
+        if (staleBeforeApplyReason) {
+            log('process:skip-apply', {
+                sourceUrl,
+                page,
+                jobId,
+                reason: staleBeforeApplyReason,
+                blobBytes: processedBlob.size,
+                cacheWriteOk: !!cacheWriteOk
+            });
+            delete img.dataset.aiProcessingSrc;
+            return;
+        }
 
         applyProcessedBlobToImage(img, sourceUrl, processedBlob);
     } catch (err) {
@@ -437,8 +490,9 @@ async function processCurrentImage(container) {
         delete img.dataset.aiProcessingSrc;
         restoreOriginalImage(img);
         log('process:error', { sourceUrl, page, jobId, error: String(err) });
-        console.error('Anime4K processing failed:', err);
+        console.error(`[NH] process-error job:${jobId} page:${page} skipped:${!!img.dataset.aiSkipSource}`, String(err));
     } finally {
+        markForegroundQueueIdle();
         if (shouldSerializeOnnxSource) {
             onnxForegroundSourceLocks.delete(sourceUrl);
         }
@@ -655,7 +709,7 @@ if (chrome?.runtime?.onMessage) {
     });
 }
 
-backendReadyPromise
+Promise.all([backendReadyPromise, onnxModelReadyPromise])
     .then(() => {
         return prewarmSelectedBackend();
     })
@@ -663,7 +717,7 @@ backendReadyPromise
         log('engine:prewarm-failed', { error: String(err) });
     });
 
-Promise.allSettled([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleReadyPromise, presetReadyPromise])
+Promise.allSettled([backendReadyPromise, webgpuModelReadyPromise, webgpuScaleReadyPromise, onnxModelReadyPromise, presetReadyPromise])
     .then((results) => {
         runBootDiagnostics(BOOT_DIAGNOSTICS_PHASE_READY);
         const failed = results

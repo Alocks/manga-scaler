@@ -3,14 +3,11 @@ let workerSession = null;
 let workerInitPromise = null;
 let workerProvider = null;
 let workerRunCounter = 0;
-let workerRunQueueDepth = 0;
-let workerRunDrainPromise = null;
-let workerRunDrainScheduled = false;
-const workerPendingRuns = [];
 let workerCanUseTensorFromImage = null;
+let workerCanUseBitmapFromImage = null;
+// Output scale is detected once on the first tile and cached for all subsequent tiles.
+let workerCachedOutputScale = null;
 const WORKER_RUN_WARNING_MS = 5000;
-const WORKER_MAX_BUFFERED_RUNS = 2;
-const WORKER_DYNAMIC_BATCH_SIZE = 1;
 const WORKER_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
 
 function getWorkerNow() {
@@ -68,7 +65,9 @@ function configureWorkerEnvironment(lib, ortDistUrl) {
         mjs: `${ortDistUrl}ort-wasm-simd-threaded.jsep.mjs`,
         wasm: `${ortDistUrl}ort-wasm-simd-threaded.jsep.wasm`
     };
-    lib.env.wasm.numThreads = 1;
+    lib.env.wasm.numThreads = (self.crossOriginIsolated && self.navigator?.hardwareConcurrency > 1)
+        ? Math.min(4, self.navigator.hardwareConcurrency)
+        : 1;
     lib.env.wasm.proxy = false;
 }
 
@@ -94,11 +93,17 @@ function inferWorkerOutputScale(data) {
     let maxValue = 0;
     for (let i = 0; i < sampleCount; i++) {
         const value = data[i];
-        if (value > maxValue) {
+        // Skip Inf/NaN — these are model artefacts, not a signal for [0,255] range.
+        if (Number.isFinite(value) && value > maxValue) {
             maxValue = value;
         }
     }
-    return maxValue <= 1.5 ? 255 : 1;
+    // Threshold is set to 10 rather than the previous 1.5.
+    // RealCUGAN's UpCunet2x sums two network paths (unet1 + unet2), so its
+    // output can naturally reach ~1.5–2.0 for saturated/bright pixels even
+    // though the model is trained on [0,1] targets.  Any legitimate [0,255]
+    // model will have peak values well above 10 throughout the tensor.
+    return maxValue > 10 ? 1 : 255;
 }
 
 async function imageBufferToTensor(rgbaBuffer, width, height) {
@@ -136,6 +141,35 @@ async function imageBufferToTensor(rgbaBuffer, width, height) {
     return new workerOrt.Tensor('float32', chw, [1, 3, height, width]);
 }
 
+async function imageBitmapToTensor(imageBitmap) {
+    if (
+        workerCanUseBitmapFromImage !== false &&
+        typeof workerOrt?.Tensor?.fromImage === 'function'
+    ) {
+        try {
+            const tensor = await workerOrt.Tensor.fromImage(imageBitmap, {
+                tensorLayout: 'NCHW',
+                tensorFormat: 'RGB',
+                dataType: 'float32'
+            });
+            workerCanUseBitmapFromImage = true;
+            imageBitmap.close();
+            return tensor;
+        } catch (bitmapError) {
+            workerCanUseBitmapFromImage = false;
+            postWorkerLog('onnx:worker-bitmap-fromimage-fallback', { reason: String(bitmapError) });
+        }
+    }
+
+    // Fallback: draw to OffscreenCanvas and extract ImageData on the CPU
+    const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(imageBitmap, 0, 0);
+    imageBitmap.close();
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    return imageBufferToTensor(imageData.data.buffer, canvas.width, canvas.height);
+}
+
 function writeImageBufferToChw(rgbaBuffer, width, height, targetChw, targetOffset = 0) {
     if (!(rgbaBuffer instanceof ArrayBuffer)) {
         throw new Error('ONNX worker received an invalid input pixel buffer');
@@ -154,24 +188,6 @@ function writeImageBufferToChw(rgbaBuffer, width, height, targetChw, targetOffse
     }
 }
 
-function imageBufferBatchToTensor(batchPayloads, width, height) {
-    const batchSize = batchPayloads.length;
-    if (!Number.isFinite(batchSize) || batchSize < 1) {
-        throw new Error('ONNX worker received an invalid batch payload');
-    }
-
-    const pixelCount = width * height;
-    const channels = 3;
-    const perImageStride = channels * pixelCount;
-    const chw = new Float32Array(batchSize * perImageStride);
-
-    for (let i = 0; i < batchSize; i++) {
-        writeImageBufferToChw(batchPayloads[i].rgbaBuffer, width, height, chw, i * perImageStride);
-    }
-
-    return new workerOrt.Tensor('float32', chw, [batchSize, channels, height, width]);
-}
-
 function tensorToImageBuffer(outputTensor, batchIndex = 0) {
     if (!outputTensor || !Array.isArray(outputTensor.dims) || outputTensor.dims.length !== 4) {
         throw new Error('Unexpected worker ONNX output tensor shape. Expected rank-4 [N,C,H,W]');
@@ -182,101 +198,102 @@ function tensorToImageBuffer(outputTensor, batchIndex = 0) {
         throw new Error(`Invalid worker ONNX output dims: ${JSON.stringify(outputTensor.dims)}`);
     }
 
-    if (!Number.isFinite(batchIndex) || batchIndex < 0 || batchIndex >= batch) {
-        throw new Error(`Invalid worker ONNX output batch index: ${batchIndex} for batch size ${batch}`);
-    }
-
-    if (batch === 1 && batchIndex === 0 && typeof outputTensor?.toImageData === 'function') {
-        try {
-            const imageData = outputTensor.toImageData({
-                tensorLayout: 'NCHW',
-                format: 'RGB'
-            });
-
-            if (imageData && imageData.data && imageData.width === outWidth && imageData.height === outHeight) {
-                return {
-                    outputWidth: outWidth,
-                    outputHeight: outHeight,
-                    outputDims: outputTensor.dims,
-                    rgbaBuffer: imageData.data.buffer.slice(
-                        imageData.data.byteOffset,
-                        imageData.data.byteOffset + imageData.data.byteLength
-                    )
-                };
-            }
-        } catch (error) {
-            postWorkerLog('onnx:worker-toimagedata-fallback', {
-                reason: String(error)
-            });
-        }
-    }
-
+    // Time the GPU->CPU readback (.data access triggers download for WebGPU tensors)
+    const dataReadStartAt = getWorkerNow();
     const data = outputTensor.data;
+    const dataReadEndAt = getWorkerNow();
+
     if (!data || typeof data.length !== 'number') {
         throw new Error('Worker ONNX output tensor has no readable data buffer');
     }
 
     const pixelCount = outWidth * outHeight;
-    const perBatchStride = channels * pixelCount;
     const channelStride = pixelCount;
-    const base = batchIndex * perBatchStride;
+    const base = batchIndex * channels * pixelCount;
     const rgba = new Uint8ClampedArray(pixelCount * 4);
-    const valueScale = inferWorkerOutputScale(data);
 
-    for (let i = 0; i < pixelCount; i++) {
-        const dst = i * 4;
-        rgba[dst] = Math.max(0, Math.min(255, Math.round(data[base + i] * valueScale)));
-        rgba[dst + 1] = Math.max(0, Math.min(255, Math.round(data[base + channelStride + i] * valueScale)));
-        rgba[dst + 2] = Math.max(0, Math.min(255, Math.round(data[base + channelStride * 2 + i] * valueScale)));
-        rgba[dst + 3] = 255;
+    // Cache output scale on first tile — avoids 2048-sample scan on every subsequent tile
+    if (!workerCachedOutputScale) {
+        workerCachedOutputScale = inferWorkerOutputScale(data);
     }
+    const valueScale = workerCachedOutputScale;
+
+    const rBase = base;
+    const gBase = base + channelStride;
+    const bBase = base + channelStride * 2;
+
+    const pixelLoopStartAt = getWorkerNow();
+    // Pre-fill alpha; three sequential channel passes keep reads contiguous in NCHW memory
+    // (vs interleaved reads that jump channelStride elements per pixel for large tiles)
+    rgba.fill(255);
+    for (let i = 0; i < pixelCount; i++) {
+        const v = (data[rBase + i] * valueScale + 0.5) | 0;
+        rgba[i * 4] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    for (let i = 0; i < pixelCount; i++) {
+        const v = (data[gBase + i] * valueScale + 0.5) | 0;
+        rgba[i * 4 + 1] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    for (let i = 0; i < pixelCount; i++) {
+        const v = (data[bBase + i] * valueScale + 0.5) | 0;
+        rgba[i * 4 + 2] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    const pixelLoopEndAt = getWorkerNow();
 
     return {
         outputWidth: outWidth,
         outputHeight: outHeight,
         outputDims: [1, channels, outHeight, outWidth],
-        rgbaBuffer: rgba.buffer
+        rgbaBuffer: rgba.buffer,
+        dataReadMs: formatWorkerDurationMs(dataReadStartAt, dataReadEndAt),
+        pixelLoopMs: formatWorkerDurationMs(pixelLoopStartAt, pixelLoopEndAt)
     };
 }
 
-function scheduleWorkerRunDrain() {
-    if (workerRunDrainScheduled) {
-        return;
-    }
+// Reusable single-element views for f32→u32 bit reinterpretation — avoids O(n) allocations in the hot loop.
+const _f32TempBuf = new Float32Array(1);
+const _u32TempBuf = new Uint32Array(_f32TempBuf.buffer);
 
-    workerRunDrainScheduled = true;
-    Promise.resolve().then(() => {
-        workerRunDrainScheduled = false;
-        if (!workerRunDrainPromise) {
-            workerRunDrainPromise = drainWorkerRunQueue().finally(() => {
-                workerRunDrainPromise = null;
-                if (workerPendingRuns.length > 0) {
-                    scheduleWorkerRunDrain();
-                }
-            });
-        }
-    });
-}
+function float32ToFloat16Array(float32Array) {
+    const len = float32Array.length;
+    const out = new Uint16Array(len);
 
-function takeNextWorkerBatch() {
-    if (workerPendingRuns.length === 0) {
-        return [];
-    }
+    for (let i = 0; i < len; i++) {
+        const val = float32Array[i];
 
-    const batch = [workerPendingRuns.shift()];
-    const headPayload = batch[0].payload;
-
-    for (let i = 0; i < workerPendingRuns.length && batch.length < WORKER_DYNAMIC_BATCH_SIZE; ) {
-        const candidate = workerPendingRuns[i];
-        if (candidate.payload.width === headPayload.width && candidate.payload.height === headPayload.height) {
-            batch.push(candidate);
-            workerPendingRuns.splice(i, 1);
+        if (Object.is(val, NaN)) {
+            out[i] = 0x7E00; // Quiet NaN
             continue;
         }
-        i += 1;
-    }
+        if (val === Infinity) {
+            out[i] = 0x7C00;
+            continue;
+        }
+        if (val === -Infinity) {
+            out[i] = 0xFC00;
+            continue;
+        }
 
-    return batch;
+        // Reinterpret f32 bits via shared buffer — no per-element heap allocations.
+        _f32TempBuf[0] = val;
+        const f32Bits = _u32TempBuf[0];
+        const sign = (f32Bits >> 16) & 0x8000;
+        let exponent = ((f32Bits >> 23) & 0xFF) - 127;
+        let mantissa = f32Bits & 0x007FFFFF;
+
+        if (exponent === 128) { // Overflow or NaN
+            out[i] = sign | 0x7C00 | (mantissa ? 0x0200 : 0);
+        } else if (exponent > 15) { // Overflow to Infinity
+            out[i] = sign | 0x7C00;
+        } else if (exponent > -15) { // Normal numbers
+            out[i] = sign | ((exponent + 15) << 10) | (mantissa >> 13);
+        } else if (exponent >= -24) { // Subnormal numbers
+            out[i] = sign | ((mantissa | 0x00800000) >> (-14 - exponent));
+        } else { // Underflow to Zero
+            out[i] = sign;
+        }
+    }
+    return out;
 }
 
 async function runWorkerInferenceBatch(batchEntries) {
@@ -284,53 +301,37 @@ async function runWorkerInferenceBatch(batchEntries) {
         return;
     }
 
-    const headPayload = batchEntries[0].payload;
-    const runId = batchEntries[0].runId;
-    const batchSize = batchEntries.length;
+    const entry = batchEntries[0];
+    const payload = entry.payload;
+    const runId = entry.runId;
     const runStartedAt = getWorkerNow();
-    const session = await ensureWorkerSession(headPayload.init);
-    const width = headPayload.width;
-    const height = headPayload.height;
+    const session = await ensureWorkerSession(payload.init);
+    const width = payload.width;
+    const height = payload.height;
     const inputName = session.inputNames?.[0];
-
-    postWorkerLog('onnx:worker-run-start', {
-        runId,
-        batchSize,
-        width,
-        height,
-        pixelCount: width * height,
-        queueDepth: workerRunQueueDepth
-    });
 
     if (!inputName) {
         throw new Error('Worker ONNX model has no input name');
     }
 
     const tensorStartAt = getWorkerNow();
-    let inputTensor = batchSize > 1
-        ? imageBufferBatchToTensor(batchEntries.map((entry) => entry.payload), width, height)
-        : await imageBufferToTensor(headPayload.rgbaBuffer, width, height);
+    let inputTensor = payload.imageBitmap != null
+        ? await imageBitmapToTensor(payload.imageBitmap)
+        : await imageBufferToTensor(payload.rgbaBuffer, width, height);
 
-    // Detect if model expects float16 input and convert if needed
-    const inputType = Array.isArray(session.inputTypes) && session.inputTypes[0] ? session.inputTypes[0] : null;
-    if (inputType === 'tensor(float16)' && inputTensor.data && inputTensor.data.constructor === Float32Array) {
-        // Convert Float32Array to Float16Array (Uint16Array bit pattern)
-        inputTensor = new workerOrt.Tensor('float16', float32ToFloat16Array(inputTensor.data), inputTensor.dims);
+    // If this session previously required float16 input, convert eagerly before the run.
+    if (session._inferredInputType === 'float16' && inputTensor.type === 'float32') {
+        const prevTensor = inputTensor;
+        inputTensor = new workerOrt.Tensor('float16', float32ToFloat16Array(prevTensor.data), prevTensor.dims);
+        if (typeof prevTensor.dispose === 'function') {
+            prevTensor.dispose();
+        }
     }
     const tensorEndAt = getWorkerNow();
-
-    postWorkerLog('onnx:worker-pass-inference-start', {
-        runId,
-        batchSize,
-        inputName,
-        inputDims: inputTensor.dims,
-        tensorBuildMs: formatWorkerDurationMs(tensorStartAt, tensorEndAt)
-    });
 
     const runWarningTimer = self.setTimeout(() => {
         postWorkerLog('onnx:worker-pass-still-running', {
             runId,
-            batchSize,
             inputName,
             inputDims: inputTensor.dims,
             elapsedMs: formatWorkerDurationMs(runStartedAt)
@@ -340,81 +341,64 @@ async function runWorkerInferenceBatch(batchEntries) {
     const inferenceStartAt = getWorkerNow();
     let outputs;
     try {
-        outputs = await session.run({ [inputName]: inputTensor });
+        try {
+            outputs = await session.run({ [inputName]: inputTensor });
+        } catch (runError) {
+            // Auto-detect float16 input requirement. ORT-Web has no public API for
+            // inspecting session input metadata, so we catch the type-mismatch error on
+            // the first run and cache the result on the session object for all subsequent
+            // runs (avoiding the retry overhead after the first tile).
+            const errMsg = String(runError?.message || runError);
+            if (errMsg.includes('float16') && inputTensor.type === 'float32') {
+                console.warn('[Manga Scaler] float16 input required — converting and retrying', { errMsg });
+                session._inferredInputType = 'float16';
+                const prevTensor = inputTensor;
+                inputTensor = new workerOrt.Tensor('float16', float32ToFloat16Array(prevTensor.data), prevTensor.dims);
+                if (typeof prevTensor.dispose === 'function') {
+                    prevTensor.dispose();
+                }
+                outputs = await session.run({ [inputName]: inputTensor });
+            } else {
+                throw runError;
+            }
+        }
     } finally {
         self.clearTimeout(runWarningTimer);
+        if (typeof inputTensor.dispose === 'function') {
+            inputTensor.dispose();
+        }
     }
     const inferenceEndAt = getWorkerNow();
 
     postWorkerLog('onnx:worker-pass-inference-complete', {
         runId,
-        batchSize,
         inputName,
         inferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt)
     });
 
-    const outputResolveStartAt = getWorkerNow();
     const outputTensor = resolveWorkerOutputTensor(outputs, session.outputNames || []);
-    const outputResolveEndAt = getWorkerNow();
-
-    postWorkerLog('onnx:worker-output-resolved', {
-        runId,
-        batchSize,
-        outputDims: outputTensor?.dims || null,
-        resolveMs: formatWorkerDurationMs(outputResolveStartAt, outputResolveEndAt)
-    });
-
-    const outputBatchSize = Array.isArray(outputTensor?.dims) ? Number(outputTensor.dims[0]) : 0;
-    if (!Number.isFinite(outputBatchSize) || outputBatchSize < batchSize) {
-        throw new Error(`Worker ONNX output batch size mismatch. Expected at least ${batchSize}, received ${outputBatchSize}`);
+    let outputImage;
+    try {
+        outputImage = tensorToImageBuffer(outputTensor, 0);
+    } finally {
+        if (typeof outputTensor.dispose === 'function') {
+            outputTensor.dispose();
+        }
     }
 
-    for (let i = 0; i < batchEntries.length; i++) {
-        const outputImage = tensorToImageBuffer(outputTensor, i);
-        batchEntries[i].resolve({
-            inputName,
-            inputDims: [1, 3, height, width],
-            outputDims: outputImage.outputDims,
-            outputWidth: outputImage.outputWidth,
-            outputHeight: outputImage.outputHeight,
-            rgbaBuffer: outputImage.rgbaBuffer,
-            provider: workerProvider
-        });
-    }
-
-    postWorkerLog('onnx:worker-pass-success', {
-        runId,
-        batchSize,
+    entry.resolve({
         inputName,
-        inputDims: inputTensor.dims,
-        outputDims: outputTensor?.dims || null,
-        inferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt),
-        totalRunMs: formatWorkerDurationMs(runStartedAt)
+        inputDims: [1, 3, height, width],
+        outputDims: outputImage.outputDims,
+        outputWidth: outputImage.outputWidth,
+        outputHeight: outputImage.outputHeight,
+        rgbaBuffer: outputImage.rgbaBuffer,
+        provider: workerProvider,
+        workerTensorBuildMs: formatWorkerDurationMs(tensorStartAt, tensorEndAt),
+        workerInferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt),
+        workerDataReadMs: outputImage.dataReadMs,
+        workerPixelLoopMs: outputImage.pixelLoopMs
     });
-}
-
-async function drainWorkerRunQueue() {
-    while (workerPendingRuns.length > 0) {
-        const batchEntries = takeNextWorkerBatch();
-        if (batchEntries.length === 0) {
-            return;
-        }
-
-        try {
-            await runWorkerInferenceBatch(batchEntries);
-        } catch (error) {
-            for (const entry of batchEntries) {
-                entry.reject(error);
-            }
-        } finally {
-            workerRunQueueDepth = Math.max(0, workerRunQueueDepth - batchEntries.length);
-            postWorkerLog('onnx:worker-run-finished', {
-                runId: batchEntries[0]?.runId || null,
-                batchSize: batchEntries.length,
-                remainingQueueDepth: workerRunQueueDepth
-            });
-        }
-    }
 }
 
 async function ensureWorkerSession(payload) {
@@ -448,7 +432,9 @@ async function ensureWorkerSession(payload) {
 
         const sessionOptions = {
             executionProviders: ['webgpu'],
-            graphOptimizationLevel: 'all'
+            graphOptimizationLevel: 'all',
+            enableCpuMemArena: false,
+            enableMemPattern: false
         };
 
         if (payload.externalDataBytes && Array.isArray(payload.externalDataPathAliases) && payload.externalDataPathAliases.length > 0) {
@@ -463,6 +449,25 @@ async function ensureWorkerSession(payload) {
         payload.modelBytes = null;
         payload.externalDataBytes = null;
         workerProvider = 'webgpu-worker';
+
+        // Warmup: run a tiny inference to pre-compile all WebGPU shaders for this model.
+        // This moves shader compilation cost from the first real tile to session init time.
+        const warmupStartedAt = getWorkerNow();
+        try {
+            const warmupInputName = workerSession.inputNames?.[0];
+            if (warmupInputName) {
+                const wW = 32, wH = 32;
+                const warmupTensor = new workerOrt.Tensor('float32', new Float32Array(wW * wH * 3), [1, 3, wH, wW]);
+                const warmupOutputs = await workerSession.run({ [warmupInputName]: warmupTensor });
+                if (typeof warmupTensor.dispose === 'function') warmupTensor.dispose();
+                for (const t of Object.values(warmupOutputs || {})) {
+                    if (typeof t?.dispose === 'function') t.dispose();
+                }
+            }
+            postWorkerLog('onnx:worker-warmup', { durationMs: formatWorkerDurationMs(warmupStartedAt) });
+        } catch (warmupErr) {
+            postWorkerLog('onnx:worker-warmup-failed', { reason: String(warmupErr) });
+        }
 
         postWorkerLog('onnx:worker-init-success', {
             provider: workerProvider,
@@ -481,29 +486,9 @@ async function ensureWorkerSession(payload) {
     }
 }
 
-async function runWorkerInference(payload) {
+function runWorkerInference(payload) {
     return new Promise((resolve, reject) => {
-        const runId = ++workerRunCounter;
-        const queueDepthAfterEnqueue = workerRunQueueDepth + 1;
-
-        workerPendingRuns.push({
-            runId,
-            payload,
-            resolve,
-            reject
-        });
-        workerRunQueueDepth = queueDepthAfterEnqueue;
-
-        postWorkerLog('onnx:worker-run-queued', {
-            runId,
-            width: payload.width,
-            height: payload.height,
-            pixelCount: payload.width * payload.height,
-            queueDepth: queueDepthAfterEnqueue,
-            maxBatchSize: WORKER_DYNAMIC_BATCH_SIZE
-        });
-
-        scheduleWorkerRunDrain();
+        runWorkerInferenceBatch([{ runId: ++workerRunCounter, payload, resolve, reject }]).catch(reject);
     });
 }
 
@@ -520,12 +505,6 @@ self.onmessage = async (event) => {
             throw new Error('Worker received an invalid message');
         }
 
-        postWorkerLog('onnx:worker-message-received', {
-            id: message.id || null,
-            type: message.type || null,
-            queueDepth: workerRunQueueDepth
-        });
-
         if (message.type === 'init') {
             const session = await ensureWorkerSession(message.payload);
             response.ok = true;
@@ -539,19 +518,6 @@ self.onmessage = async (event) => {
         }
 
         if (message.type === 'run') {
-            if (workerRunQueueDepth >= WORKER_MAX_BUFFERED_RUNS) {
-                const backpressureError = new Error('ONNX worker queue is saturated; rejecting run to prevent memory growth');
-                backpressureError.name = 'OnnxWorkerBackpressureError';
-
-                postWorkerLog('onnx:worker-run-rejected-backpressure', {
-                    id: message.id || null,
-                    queueDepth: workerRunQueueDepth,
-                    maxBufferedRuns: WORKER_MAX_BUFFERED_RUNS
-                });
-
-                throw backpressureError;
-            }
-
             const result = await runWorkerInference(message.payload);
             response.ok = true;
             response.payload = result;
