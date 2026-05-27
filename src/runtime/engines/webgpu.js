@@ -1,4 +1,4 @@
-// WebGPU backend orchestration; model factories live under runtime/factories/ai-models.
+// WebGPU backend orchestration; shader factories live under runtime/factories/shaders.
 
 let webgpuDevicePromise = null;
 let webgpuRenderPipeline = null;
@@ -1161,6 +1161,7 @@ async function runAnime4KWebGpu(tempImg, canvas, runtimeSettings = getRuntimePre
     const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
     const profilingEnabled = isRuntimeProfilingEnabled();
     const upscaleStart = profilingEnabled ? getProfileNow() : 0;
+
     const lib = getAnime4kWebGpuLibrary();
     if (!lib) {
         throw new Error('anime4k-webgpu runtime is not loaded on window');

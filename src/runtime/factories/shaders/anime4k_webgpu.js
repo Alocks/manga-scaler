@@ -1,4 +1,4 @@
-// Anime4K WebGPU model factory.
+// Anime4K WebGPU shader factory.
 
 const WEBGPU_ANIME4K_MODEL_CTOR_NAMES = ['Anime4K', 'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'];
 const WEBGPU_ANIME4K_PROVIDER_NAME = 'anime4k-webgpu';
@@ -60,7 +60,7 @@ function getAnime4kWebGpuProcessingFactory(lib, runtimeSettings = getRuntimePref
         ? 'Anime4K'
         : (presetCtor.name || settings.selectedWebGpuModel);
 
-    return createAiModelFactory({
+    return createShaderFactory({
         providerName: WEBGPU_ANIME4K_PROVIDER_NAME,
         kind,
         modelName,
@@ -86,7 +86,7 @@ function getAnime4kWebGpuProcessingFactory(lib, runtimeSettings = getRuntimePref
                     runPass(encoder) {
                         anime.render(outputTexture, encoder);
                     },
-                    dispose: createAiModelDisposeFromMethods(anime, ['destroy', 'dispose'])
+                    dispose: createShaderDisposeFromMethods(anime, ['destroy', 'dispose'])
                 };
             }
 
@@ -107,7 +107,7 @@ function getAnime4kWebGpuProcessingFactory(lib, runtimeSettings = getRuntimePref
                 runPass(encoder) {
                     pipeline.pass(encoder);
                 },
-                dispose: createAiModelDisposeFromMethods(pipeline, ['destroy', 'dispose'])
+                dispose: createShaderDisposeFromMethods(pipeline, ['destroy', 'dispose'])
             };
         }
     });

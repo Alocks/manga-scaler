@@ -1,31 +1,31 @@
-// Shared helpers for AI model processing factories.
+// Shared helpers for runtime shader processing factories.
 
-function callAiModelFactoryHook(fn) {
+function callShaderFactoryHook(fn) {
     if (typeof fn !== 'function') return;
     try {
         fn();
     } catch {}
 }
 
-function createAiModelDisposeFromMethods(target, methodNames = []) {
-    return function disposeAiModelMethods() {
+function createShaderDisposeFromMethods(target, methodNames = []) {
+    return function disposeShaderMethods() {
         for (const methodName of methodNames) {
-            callAiModelFactoryHook(target?.[methodName]);
+            callShaderFactoryHook(target?.[methodName]);
         }
     };
 }
 
-function createAiModelFactory({
+function createShaderFactory({
     providerName,
     kind,
     modelName,
     createResources
 }) {
     if (!providerName || typeof providerName !== 'string') {
-        throw new Error('createAiModelFactory requires providerName');
+        throw new Error('createShaderFactory requires providerName');
     }
     if (typeof createResources !== 'function') {
-        throw new Error(`createAiModelFactory requires createResources() for provider ${providerName}`);
+        throw new Error(`createShaderFactory requires createResources() for provider ${providerName}`);
     }
 
     return {
@@ -35,13 +35,13 @@ function createAiModelFactory({
         createResources(args) {
             const created = createResources(args || {});
             if (!created || typeof created !== 'object') {
-                throw new Error(`AI model factory ${providerName} returned an invalid resource descriptor`);
+                throw new Error(`Shader factory ${providerName} returned an invalid resource descriptor`);
             }
             if (typeof created.runPass !== 'function') {
-                throw new Error(`AI model factory ${providerName} must provide runPass()`);
+                throw new Error(`Shader factory ${providerName} must provide runPass()`);
             }
             if (!created.outputTexture) {
-                throw new Error(`AI model factory ${providerName} must provide outputTexture`);
+                throw new Error(`Shader factory ${providerName} must provide outputTexture`);
             }
 
             return {
@@ -52,3 +52,7 @@ function createAiModelFactory({
         }
     };
 }
+
+// Backwards-compatibility aliases for older references.
+const createAiModelFactory = createShaderFactory;
+const createAiModelDisposeFromMethods = createShaderDisposeFromMethods;

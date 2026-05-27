@@ -9,6 +9,7 @@ const DEFAULT_ENGINE_BACKEND = 'webgl';
 const DEFAULT_WEBGPU_MODEL = 'ModeA';
 const DEFAULT_WEBGPU_SCALE = 2;
 const DEFAULT_ONNX_MODEL = 'realesrgan-2xplus';
+const WEBGPU_MODEL_VALUES = new Set(['ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA']);
 const FALLBACK_ONNX_MODEL_OPTIONS = [
   { key: 'realesrgan-2xplus', title: 'RealESRGAN 2x+' },
   { key: 'realesr-general-x4v3', title: 'RealESR General x4 v3' }
@@ -127,6 +128,11 @@ function buildOnnxModelSelectOptions(selectedValue = DEFAULT_ONNX_MODEL) {
 function normalizeWebGpuScale(value) {
   const scale = Number(value);
   return scale === 2 || scale === 3 || scale === 4 ? scale : DEFAULT_WEBGPU_SCALE;
+}
+
+function normalizeWebGpuModel(value) {
+  const normalized = String(value || '').trim();
+  return WEBGPU_MODEL_VALUES.has(normalized) ? normalized : DEFAULT_WEBGPU_MODEL;
 }
 
 function setCacheActionStatus(message, tone = '') {
@@ -267,7 +273,7 @@ async function loadCurrentSettings() {
 
   const currentPreset = String(result[SIMPLE_PRESET_KEY] || DEFAULT_SIMPLE_PRESET).toUpperCase();
   let currentBackend = String(result[ENGINE_BACKEND_KEY] || DEFAULT_ENGINE_BACKEND).toLowerCase();
-  const currentWebGpuModel = String(result[WEBGPU_MODEL_KEY] || DEFAULT_WEBGPU_MODEL);
+  const currentWebGpuModel = normalizeWebGpuModel(result[WEBGPU_MODEL_KEY]);
   const currentWebGpuScale = normalizeWebGpuScale(result[WEBGPU_SCALE_KEY]);
   const currentOnnxModel = normalizeOnnxModel(result[ONNX_MODEL_KEY]);
 
@@ -339,7 +345,8 @@ if (shaderBackendSelect) {
 document.querySelectorAll('input[name="webgpuModel"]').forEach((radio) => {
   radio.addEventListener('change', async (e) => {
     if (e.target.checked) {
-      await persistSettingAndRefresh({ [WEBGPU_MODEL_KEY]: e.target.value });
+      const nextModel = normalizeWebGpuModel(e.target.value);
+      await persistSettingAndRefresh({ [WEBGPU_MODEL_KEY]: nextModel });
     }
   });
 });
