@@ -910,7 +910,7 @@ function getOnnxPreprocessContext(width, height) {
         onnxPreprocessContext = onnxPreprocessCanvas.getContext('2d', {
             alpha: false,
             desynchronized: true,
-            willReadFrequently: true
+            //willReadFrequently: true
         });
     }
 
@@ -1488,8 +1488,8 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
     const tileColumns = Math.ceil(sourceWidth / coreStep);
     const tileRows = Math.ceil(sourceHeight / coreStep);
 
-    const tileInputCanvas = createOnnxWorkingCanvas(1, 1);
-    const tileOutputCanvas = createOnnxWorkingCanvas(1, 1);
+    const tileInputCanvas = createOnnxWorkingCanvas(tileEdge, tileEdge);
+    const tileOutputCanvas = createOnnxWorkingCanvas(tileEdge, tileEdge);
     const destCtx = outputCanvas.getContext('2d', { alpha: true, desynchronized: true });
     if (!destCtx) {
         throw new Error('Failed to acquire output canvas context for ONNX tiled compose');
@@ -1551,17 +1551,19 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
             }
 
             const tilePrepareStartAt = getOnnxNow();
-            tileInputCtx.clearRect(0, 0, tileInputWidth, tileInputHeight);
+
+            tileInputCtx.clearRect(0, 0, tileEdge, tileEdge);
+            // Draw into the top-left section of our fixed-size canvas
             tileInputCtx.drawImage(
                 sourceImage,
-                tileInputX,
-                tileInputY,
-                tileInputWidth,
-                tileInputHeight,
-                0,
-                0,
-                tileInputWidth,
-                tileInputHeight
+                tileInputX,       // sx
+                tileInputY,       // sy
+                tileInputWidth,   // sw
+                tileInputHeight,  // sh
+                0,                // dx
+                0,                // dy
+                tileInputWidth,   // dw
+                tileInputHeight   // dh
             );
             const tilePrepareEndAt = getOnnxNow();
 
@@ -1588,6 +1590,10 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
             } else {
                 pass = await runOnnxInferencePass(tileInputCanvas, tileOutputCanvas, executionOptions);
             }
+            // FIX: Ensure numeric parsing before accumulation to prevent string concatenation
+            const stepInferenceMs = typeof pass.inferenceMs === 'string' 
+                ? parseFloat(pass.inferenceMs) 
+                : (pass.inferenceMs || 0);
             totalInferenceMs += pass.inferenceMs;
             tileCount++;
 
@@ -1601,8 +1607,8 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
             });
 
             if (scaleX === null || scaleY === null) {
-                scaleX = pass.outputWidth / tileInputWidth;
-                scaleY = pass.outputHeight / tileInputHeight;
+                scaleX = pass.outputWidth / tileEdge; 
+                scaleY = pass.outputHeight / tileEdge;
 
                 outputCanvas.width = Math.max(1, Math.round(sourceWidth * scaleX));
                 outputCanvas.height = Math.max(1, Math.round(sourceHeight * scaleY));
