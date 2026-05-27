@@ -9,6 +9,72 @@ let workerCanUseBitmapFromImage = null;
 let workerCachedOutputScale = null;
 const WORKER_RUN_WARNING_MS = 5000;
 const WORKER_BYTE_TO_UNIT_FLOAT = 0.00392156862745098;
+let workerWarnFilterInstalled = false;
+let workerOnnxProfilingEnabled = false;
+let workerActiveGpuProfileCollector = null;
+
+function createWorkerGpuProfileCollector() {
+    return {
+        totalMs: 0,
+        kernelCount: 0,
+        maxMs: 0,
+        events: [],
+        hotspots: Object.create(null)
+    };
+}
+
+function getWorkerGpuProfileEventDurationMs(data) {
+    if (!data || typeof data !== 'object') {
+        return 0;
+    }
+
+    const startTime = Number(data.startTime);
+    const endTime = Number(data.endTime);
+    if (Number.isFinite(startTime) && Number.isFinite(endTime) && endTime >= startTime) {
+        return Math.max(0, (endTime - startTime) / 1e6);
+    }
+
+    const directDuration = Number(data.durationMs ?? data.duration ?? data.elapsedMs ?? data.timeMs ?? data.totalMs ?? 0);
+    return Number.isFinite(directDuration) && directDuration >= 0 ? directDuration : 0;
+}
+
+function finalizeWorkerGpuProfileSummary(collector) {
+    if (!collector) {
+        return null;
+    }
+
+    const topEvents = [...collector.events]
+        .sort((left, right) => right.durationMs - left.durationMs || left.eventIndex - right.eventIndex)
+        .slice(0, 10);
+
+    const topHotspots = Object.values(collector.hotspots)
+        .map((hotspot) => ({
+            ...hotspot,
+            avgMs: hotspot.count > 0 ? Number((hotspot.totalMs / hotspot.count).toFixed(3)) : 0
+        }))
+        .sort((left, right) => right.totalMs - left.totalMs || right.count - left.count || right.maxMs - left.maxMs)
+        .slice(0, 12);
+
+    const slowestHotspots = Object.values(collector.hotspots)
+        .map((hotspot) => ({
+            ...hotspot,
+            avgMs: hotspot.count > 0 ? Number((hotspot.totalMs / hotspot.count).toFixed(3)) : 0
+        }))
+        .sort((left, right) => right.avgMs - left.avgMs || right.maxMs - left.maxMs || right.count - left.count)
+        .slice(0, 12);
+
+    return {
+        kernelCount: collector.kernelCount,
+        totalMs: collector.totalMs,
+        maxMs: collector.maxMs,
+        avgMs: collector.kernelCount > 0 ? Number((collector.totalMs / collector.kernelCount).toFixed(3)) : 0,
+        topEvents,
+        topHotspots,
+        slowestHotspots,
+        firstEvent: collector.events[0] || null,
+        lastEvent: collector.events.length > 0 ? collector.events[collector.events.length - 1] : null
+    };
+}
 
 function getWorkerNow() {
     if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
@@ -56,11 +122,108 @@ function loadOrtRuntime(ortScriptUrl) {
     return workerOrt;
 }
 
+function installOrtWarningFilter() {
+    if (workerWarnFilterInstalled) {
+        return;
+    }
+
+    const originalWarn = console.warn.bind(console);
+    console.warn = (...args) => {
+        const message = args.map((value) => {
+            if (typeof value === 'string') return value;
+            if (value && typeof value.message === 'string') return value.message;
+            return String(value);
+        }).join(' ');
+
+        if (
+            message.includes('VerifyEachNodeIsAssignedToAnEp') ||
+            message.includes('session_state.cc:1367') ||
+            message.includes('session_state.cc:1369')
+        ) {
+            return;
+        }
+
+        originalWarn(...args);
+    };
+
+    workerWarnFilterInstalled = true;
+}
+
+function installOrtGpuProfilingCollector(lib) {
+    if (!lib?.env?.webgpu) {
+        return;
+    }
+
+    lib.env.webgpu.profiling = {
+        mode: workerOnnxProfilingEnabled ? 'default' : 'off',
+        ondata(data) {
+            const collector = workerActiveGpuProfileCollector;
+            if (!collector || !data || typeof data !== 'object') {
+                return;
+            }
+
+            if (!Array.isArray(collector.events)) {
+                collector.events = [];
+            }
+            if (!collector.hotspots || typeof collector.hotspots !== 'object') {
+                collector.hotspots = Object.create(null);
+            }
+
+            const durationMs = getWorkerGpuProfileEventDurationMs(data);
+            const startTime = Number(data.startTime);
+            const endTime = Number(data.endTime);
+            const kernelName = String(data.kernelName || data.name || data.label || 'unknown');
+            const programName = String(data.programName || data.shaderName || 'unknown');
+            const kernelType = String(data.kernelType || data.type || data.category || 'unknown');
+            const eventIndex = collector.events.length;
+            const event = {
+                eventIndex,
+                kernelId: data.kernelId ?? null,
+                kernelType,
+                kernelName,
+                programName,
+                startTime: Number.isFinite(startTime) ? startTime : null,
+                endTime: Number.isFinite(endTime) ? endTime : null,
+                durationMs: Number(durationMs.toFixed(3))
+            };
+
+            collector.totalMs += durationMs;
+            collector.kernelCount += 1;
+            collector.maxMs = Math.max(collector.maxMs, durationMs);
+            collector.events.push(event);
+
+            const hotspotKey = `${kernelType}::${programName}::${kernelName}`;
+            if (!collector.hotspots[hotspotKey]) {
+                collector.hotspots[hotspotKey] = {
+                    hotspotKey,
+                    kernelType,
+                    programName,
+                    kernelName,
+                    count: 0,
+                    totalMs: 0,
+                    maxMs: 0,
+                    firstEventIndex: eventIndex,
+                    lastEventIndex: eventIndex
+                };
+            }
+
+            const hotspot = collector.hotspots[hotspotKey];
+            hotspot.count += 1;
+            hotspot.totalMs = Number((hotspot.totalMs + durationMs).toFixed(6));
+            hotspot.maxMs = Math.max(hotspot.maxMs, durationMs);
+            hotspot.lastEventIndex = eventIndex;
+        }
+    };
+}
+
 function configureWorkerEnvironment(lib, ortDistUrl) {
     if (!lib?.env?.wasm) {
         return;
     }
 
+    installOrtWarningFilter();
+    installOrtGpuProfilingCollector(lib);
+    lib.env.logLevel = 'error';
     lib.env.wasm.wasmPaths = {
         mjs: `${ortDistUrl}ort-wasm-simd-threaded.jsep.mjs`,
         wasm: `${ortDistUrl}ort-wasm-simd-threaded.jsep.wasm`
@@ -339,10 +502,16 @@ async function runWorkerInferenceBatch(batchEntries) {
     }, WORKER_RUN_WARNING_MS);
 
     const inferenceStartAt = getWorkerNow();
+    let gpuFirstRunMs = null;
+    let gpuRetryRunMs = 0;
+    workerActiveGpuProfileCollector = workerOnnxProfilingEnabled ? createWorkerGpuProfileCollector() : null;
     let outputs;
     try {
         try {
+            const firstRunStartAt = getWorkerNow();
             outputs = await session.run({ [inputName]: inputTensor });
+            const firstRunEndAt = getWorkerNow();
+            gpuFirstRunMs = formatWorkerDurationMs(firstRunStartAt, firstRunEndAt);
         } catch (runError) {
             // Auto-detect float16 input requirement. ORT-Web has no public API for
             // inspecting session input metadata, so we catch the type-mismatch error on
@@ -357,7 +526,13 @@ async function runWorkerInferenceBatch(batchEntries) {
                 if (typeof prevTensor.dispose === 'function') {
                     prevTensor.dispose();
                 }
+                const retryRunStartAt = getWorkerNow();
                 outputs = await session.run({ [inputName]: inputTensor });
+                const retryRunEndAt = getWorkerNow();
+                gpuRetryRunMs = formatWorkerDurationMs(retryRunStartAt, retryRunEndAt);
+                if (gpuFirstRunMs === null) {
+                    gpuFirstRunMs = 0;
+                }
             } else {
                 throw runError;
             }
@@ -369,12 +544,20 @@ async function runWorkerInferenceBatch(batchEntries) {
         }
     }
     const inferenceEndAt = getWorkerNow();
+    const gpuTotalMs = formatWorkerDurationMs(inferenceStartAt, inferenceEndAt);
+    const gpuProfileSummary = finalizeWorkerGpuProfileSummary(workerActiveGpuProfileCollector);
+    workerActiveGpuProfileCollector = null;
 
     postWorkerLog('onnx:worker-pass-inference-complete', {
         runId,
         inputName,
-        inferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt)
+        inferenceMs: gpuTotalMs,
+        gpuFirstRunMs,
+        gpuRetryRunMs,
+        gpuTotalMs
     });
+
+    const outputConvertStartAt = getWorkerNow();
 
     const outputTensor = resolveWorkerOutputTensor(outputs, session.outputNames || []);
     let outputImage;
@@ -385,6 +568,8 @@ async function runWorkerInferenceBatch(batchEntries) {
             outputTensor.dispose();
         }
     }
+    const outputConvertEndAt = getWorkerNow();
+    const outputConvertMs = formatWorkerDurationMs(outputConvertStartAt, outputConvertEndAt);
 
     entry.resolve({
         inputName,
@@ -395,7 +580,20 @@ async function runWorkerInferenceBatch(batchEntries) {
         rgbaBuffer: outputImage.rgbaBuffer,
         provider: workerProvider,
         workerTensorBuildMs: formatWorkerDurationMs(tensorStartAt, tensorEndAt),
-        workerInferenceMs: formatWorkerDurationMs(inferenceStartAt, inferenceEndAt),
+        workerInferenceMs: gpuTotalMs,
+        workerGpuFirstRunMs: gpuFirstRunMs,
+        workerGpuRetryRunMs: gpuRetryRunMs,
+        workerGpuTotalMs: gpuTotalMs,
+        workerGpuKernelCount: gpuProfileSummary?.kernelCount ?? null,
+        workerGpuKernelAvgMs: gpuProfileSummary?.avgMs ?? null,
+        workerGpuKernelTotalMs: gpuProfileSummary ? Number(gpuProfileSummary.totalMs.toFixed(3)) : null,
+        workerGpuKernelMaxMs: gpuProfileSummary ? Number(gpuProfileSummary.maxMs.toFixed(3)) : null,
+        workerGpuKernelTop: gpuProfileSummary?.topEvents ?? null,
+        workerGpuKernelHotspots: gpuProfileSummary?.topHotspots ?? null,
+        workerGpuKernelSlowestHotspots: gpuProfileSummary?.slowestHotspots ?? null,
+        workerGpuKernelFirstEvent: gpuProfileSummary?.firstEvent ?? null,
+        workerGpuKernelLastEvent: gpuProfileSummary?.lastEvent ?? null,
+        workerOutputConvertMs: outputConvertMs,
         workerDataReadMs: outputImage.dataReadMs,
         workerPixelLoopMs: outputImage.pixelLoopMs
     });
@@ -413,6 +611,7 @@ async function ensureWorkerSession(payload) {
     workerInitPromise = (async () => {
         const startedAt = getWorkerNow();
         const lib = loadOrtRuntime(payload.ortScriptUrl);
+        workerOnnxProfilingEnabled = !!payload.onnxProfilingEnabled;
         configureWorkerEnvironment(lib, payload.ortDistUrl);
 
         if (payload.ortWasmModuleUrl && payload.ortWasmBinaryUrl) {

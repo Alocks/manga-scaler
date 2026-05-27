@@ -14,7 +14,7 @@ const ONNX_WORKER_PENDING_WARNING_MS = 5000;
 const ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS = 1;
 const ONNX_INIT_RETRY_BASE_DELAY_MS = 1000;
 const ONNX_INIT_RETRY_MAX_DELAY_MS = 30000;
-const ONNX_TILE_MAX_PARALLELISM = 2;
+const ONNX_TILE_MAX_PARALLELISM = 1;
 
 function createOnnxWorkerLaneState() {
     return {
@@ -526,7 +526,8 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
                 externalDataUrl: artifacts.externalDataUrl,
                 externalDataPathAliases: onnxActiveModel.externalDataPathAliases,
                 modelBytes: modelBuffer,
-                externalDataBytes: externalDataBuffer
+                externalDataBytes: externalDataBuffer,
+                onnxProfilingEnabled: !!window.MangaScalerProfiling?.isOnnxEnabled?.()
             }, transferList, normalizedLane);
         }
 
@@ -996,7 +997,19 @@ async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions =
         prepareMs: executionOptions?.tilePrepareMs ?? null,
         bitmapMs: formatOnnxDurationMs(tensorBuildStartAt, tensorBuildEndAt),
         workerBuildMs: workerResult.workerTensorBuildMs ?? null,
-        gpuMs: workerResult.workerInferenceMs ?? null,
+        gpuMs: workerResult.workerGpuTotalMs ?? workerResult.workerInferenceMs ?? null,
+        gpuRunMs: workerResult.workerGpuFirstRunMs ?? null,
+        gpuRetryMs: workerResult.workerGpuRetryRunMs ?? null,
+        gpuOutputMs: workerResult.workerOutputConvertMs ?? null,
+        gpuKernelCount: workerResult.workerGpuKernelCount ?? null,
+        gpuKernelAvgMs: workerResult.workerGpuKernelAvgMs ?? null,
+        gpuKernelTotalMs: workerResult.workerGpuKernelTotalMs ?? null,
+        gpuKernelMaxMs: workerResult.workerGpuKernelMaxMs ?? null,
+        gpuKernelTop: workerResult.workerGpuKernelTop ?? null,
+        gpuKernelHotspots: workerResult.workerGpuKernelHotspots ?? null,
+        gpuKernelSlowestHotspots: workerResult.workerGpuKernelSlowestHotspots ?? null,
+        gpuKernelFirstEvent: workerResult.workerGpuKernelFirstEvent ?? null,
+        gpuKernelLastEvent: workerResult.workerGpuKernelLastEvent ?? null,
         readbackMs: workerResult.workerDataReadMs ?? null,
         pixelMs: workerResult.workerPixelLoopMs ?? null,
         putMs: formatOnnxDurationMs(canvasWriteStartAt, canvasWriteEndAt),
@@ -1020,9 +1033,12 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
     const coreStep = Math.max(64, tileEdge - overlap * 2);
     const tileColumns = Math.ceil(sourceWidth / coreStep);
     const tileRows = Math.ceil(sourceHeight / coreStep);
-    const maxTileParallelism = Math.max(
-        1,
-        Math.min(ONNX_TILE_MAX_PARALLELISM, ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS)
+    const maxTileParallelism = Math.max(1, Math.floor(ONNX_TILE_MAX_PARALLELISM));
+
+    await Promise.all(
+        Array.from({ length: maxTileParallelism }, (_unused, slotIndex) => {
+            return ensureOnnxWorkerReady(getOnnxParallelExecutionLane(executionLane, slotIndex));
+        })
     );
 
     const destCtx = outputCanvas.getContext('2d', { alpha: true, desynchronized: true });

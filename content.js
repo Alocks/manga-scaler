@@ -15,6 +15,7 @@ document.addEventListener('visibilitychange', () => {
 
 const DEBUG = false;
 const ENABLE_WEBGPU_PROFILING = false;
+const ENABLE_ONNX_PROFILING = true;
 const ALWAYS_LOG_LABELS = new Set([
     'bg-process:skip-cached',
     'bg-process:upscale-time',
@@ -22,7 +23,9 @@ const ALWAYS_LOG_LABELS = new Set([
 ]);
 
 function bootstrapLog(label, data = {}) {
-    const profilingEnabled = ENABLE_WEBGPU_PROFILING && label.startsWith('profile:');
+    const isProfileLabel = label.startsWith('profile:');
+    const isOnnxProfileLabel = label.startsWith('profile:onnx');
+    const profilingEnabled = (ENABLE_WEBGPU_PROFILING && isProfileLabel && !isOnnxProfileLabel) || (ENABLE_ONNX_PROFILING && isOnnxProfileLabel);
     if (!DEBUG && !profilingEnabled && !ALWAYS_LOG_LABELS.has(label)) return;
     console.log('[Manga Scaler]', label, { ts: new Date().toISOString(), ...data });
 }
@@ -31,8 +34,12 @@ window.MangaScalerDebugEnabled = DEBUG;
 window.MangaScalerLog = bootstrapLog;
 window.MangaScalerProfiling = {
     enabled: ENABLE_WEBGPU_PROFILING,
+    onnxEnabled: ENABLE_ONNX_PROFILING,
     isEnabled() {
         return ENABLE_WEBGPU_PROFILING;
+    },
+    isOnnxEnabled() {
+        return ENABLE_ONNX_PROFILING;
     }
 };
 

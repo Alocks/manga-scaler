@@ -52,9 +52,20 @@ function isRuntimeProfilingEnabled() {
     return !!window.MangaScalerProfiling?.isEnabled?.();
 }
 
+function isOnnxProfilingEnabled() {
+    return !!window.MangaScalerProfiling?.isOnnxEnabled?.();
+}
+
 function runtimeProfileLog(label, data = {}) {
-    if (!isRuntimeProfilingEnabled()) return;
-    runtimeLog(`profile:${label}`, data);
+    const normalizedLabel = String(label || '');
+
+    if (normalizedLabel.startsWith('onnx:')) {
+        if (!isOnnxProfilingEnabled()) return;
+    } else if (!isRuntimeProfilingEnabled()) {
+        return;
+    }
+
+    runtimeLog(`profile:${normalizedLabel}`, data);
 }
 
 function normalizeSimplePreset(value) {
