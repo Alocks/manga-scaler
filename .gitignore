@@ -149,3 +149,4 @@ _metadata/
 # Project specific
 src/runtime/runtime.bundle.js
 .vscode
+.venv

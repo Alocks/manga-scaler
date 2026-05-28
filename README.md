@@ -1,39 +1,45 @@
-## !! Be aware. This is only worth on 2K/4K monitors. 
-Try checking Before and After sample bellow and check if it is really worth. 
-I tested in my 1080p monitor and the difference is very small compared to my 4K monitor.
-
 ## manga-scaler
 A GPU-accelerated Chrome extension designed to upscale and sharpen images in real-time. With processing speeds as low as 100ms, the enhancement is seamless and unnoticeable. It is ideal for 4K monitor users looking to improve image clarity for reading.
+<table>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/de08d44f-b7f5-4f9e-863b-2c09cf0cfe69" alt="Original">Original</td>
+    <td><img src="https://github.com/user-attachments/assets/d4d20b3c-baf5-47c2-b44e-c6dd8fe5f378" alt="Anime4K">Anime4K</td>
+  </tr>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/801b492d-1742-4191-a7ea-9478361bbebb" alt="RealCUGAN">RealCUGAN</td>
+    <td><img src="https://github.com/user-attachments/assets/69f7fe8e-aceb-4110-a3e7-296e49226848" alt="MangaJaNai">MangaJaNai</td>
+  </tr>
+</table>  
 
-Currently works for the following websites:
-- Nhentai
-- Comix
-- MangaDex
-- Mangakakalot
-- Manganato
+### Currently works for the following websites:
 
-Available engines and profiles:
-- **Shaders** Best performance for low-end computer
-- **ONNX** GPU Heavy, but best option. [Use AI models]
-- <img width="1316" height="1394" alt="image" src="https://github.com/user-attachments/assets/c9b7d0d2-2d07-4457-b2fd-fe9b689a0991" />
+- **Nhentai**
+- **Comix**
+- **MangaDex**
+- **Mangakakalot**
+- **Manganato**
 
+### Available engines and profiles:
+- **Shaders** *Best performance for low-end computers*
+- **ONNX** *GPU Heavy, but best quality. [Uses AI models]*
+
+*All included ONNX models have been fine-tuned specifically for this extension.  
+If you choose to use them in other applications USE AT YOUR OWN RISK.*
+
+## Minimum Requirements to use ONNX:
+- **NVIDIA RTX 20 Series or newer** *note: GTX 10 series emulates FP16 and is hella slow*
+- **AMD RX 5000 Series or newer**
+- **Apple M1 or newer**
+- **Intel 11th Gen or newer**
 
 ## Models available for ONNX
-- RealESRGAN 2x+
-- RealESR AnimeVideo v3
-- MangaJaNai 2x 1200p V1
-- RealCUGAN Conservative
-- RealCUGAN 2X Latest Denoise 1x
-- AnimeSharp V2 MoSR Sharp
-- AnimeSharp V2 RPLKSR Sharp
+- **RealESRGAN 2x+**
+- **RealESR AnimeVideo v3**
+- **MangaJaNai 2x 1200p V1**
+- **RealCUGAN Conservative**
+- **RealCUGAN 2X Latest Denoise 1x**
 
-## Before
-<img width="532" height="398" alt="image" src="https://github.com/user-attachments/assets/0700422a-7543-42e0-927c-d1cf2b4c460b" />
-
-## After
-<img width="532" height="398" alt="image" src="https://github.com/user-attachments/assets/891cf80f-7c7a-4efd-a2bd-22fd02e89442" />
-
-## How to build the extension locally
+# How to build the extension locally
 
 Both scripts generate artifacts inside the `dist` folder:
 - `dist/manga-scaler.zip`
