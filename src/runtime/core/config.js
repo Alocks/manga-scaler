@@ -16,7 +16,7 @@ const WEBGPU_MODEL_VALUES = new Set([
     'ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA'
 ]);
 const WEBGPU_SCALE_VALUES = new Set([2, 3, 4]);
-const ONNX_MODEL_VALUES = new Set([
+const FALLBACK_ONNX_MODEL_VALUES = new Set([
     'realesrgan-2xplus',
     'realesr-animevideov3',
     'up2x-latest-conservative',
@@ -91,7 +91,18 @@ function normalizeWebGpuScale(value) {
 
 function normalizeOnnxModel(value) {
     const normalized = String(value || '').trim();
-    return ONNX_MODEL_VALUES.has(normalized) ? normalized : DEFAULT_ONNX_MODEL;
+    if (typeof globalThis.normalizeOnnxModelKey === 'function') {
+        return globalThis.normalizeOnnxModelKey(normalized);
+    }
+
+    if (typeof globalThis.getOnnxModelOptions === 'function') {
+        const options = globalThis.getOnnxModelOptions();
+        if (Array.isArray(options) && options.some((option) => option?.key === normalized)) {
+            return normalized;
+        }
+    }
+
+    return FALLBACK_ONNX_MODEL_VALUES.has(normalized) ? normalized : DEFAULT_ONNX_MODEL;
 }
 
 function getRuntimePreferenceSnapshot() {
@@ -115,129 +126,149 @@ function getNormalizedRuntimePreferenceSnapshot(snapshot) {
     };
 }
 
-function applyRuntimePreferenceStorageChanges(changes) {
-    const hasPresetChange = !!changes[SIMPLE_PRESET_KEY];
-    const hasBackendChange = !!changes[ENGINE_BACKEND_KEY];
-    const hasWebGpuModelChange = !!changes[WEBGPU_MODEL_KEY];
-    const hasWebGpuScaleChange = !!changes[WEBGPU_SCALE_KEY];
-    const hasOnnxModelChange = !!changes[ONNX_MODEL_KEY];
-    if (!hasPresetChange && !hasBackendChange && !hasWebGpuModelChange && !hasWebGpuScaleChange && !hasOnnxModelChange) {
+function applyNormalizedPreferenceChange(changes, key, normalize, currentValue, setValue) {
+    if (!changes[key]) {
         return false;
     }
 
+    const nextValue = normalize(changes[key].newValue);
+    if (nextValue === currentValue) {
+        return false;
+    }
+
+    setValue(nextValue);
+    return true;
+}
+
+function applyRuntimePreferenceStorageChanges(changes) {
     let didChange = false;
 
-    if (hasPresetChange) {
-        const nextPreset = normalizeSimplePreset(changes[SIMPLE_PRESET_KEY].newValue);
-        if (nextPreset !== selectedSimplePreset) {
-            selectedSimplePreset = nextPreset;
-            didChange = true;
-        }
-    }
+    didChange = applyNormalizedPreferenceChange(
+        changes,
+        SIMPLE_PRESET_KEY,
+        normalizeSimplePreset,
+        selectedSimplePreset,
+        (value) => { selectedSimplePreset = value; }
+    ) || didChange;
 
-    if (hasBackendChange) {
-        const nextBackend = normalizeEngineBackend(changes[ENGINE_BACKEND_KEY].newValue);
-        if (nextBackend !== selectedEngineBackend) {
-            selectedEngineBackend = nextBackend;
-            didChange = true;
-        }
-    }
+    didChange = applyNormalizedPreferenceChange(
+        changes,
+        ENGINE_BACKEND_KEY,
+        normalizeEngineBackend,
+        selectedEngineBackend,
+        (value) => { selectedEngineBackend = value; }
+    ) || didChange;
 
-    if (hasWebGpuModelChange) {
-        const nextWebGpuModel = normalizeWebGpuModel(changes[WEBGPU_MODEL_KEY].newValue);
-        if (nextWebGpuModel !== selectedWebGpuModel) {
-            selectedWebGpuModel = nextWebGpuModel;
-            didChange = true;
-        }
-    }
+    didChange = applyNormalizedPreferenceChange(
+        changes,
+        WEBGPU_MODEL_KEY,
+        normalizeWebGpuModel,
+        selectedWebGpuModel,
+        (value) => { selectedWebGpuModel = value; }
+    ) || didChange;
 
-    if (hasWebGpuScaleChange) {
-        const nextWebGpuScale = normalizeWebGpuScale(changes[WEBGPU_SCALE_KEY].newValue);
-        if (nextWebGpuScale !== selectedWebGpuScale) {
-            selectedWebGpuScale = nextWebGpuScale;
-            didChange = true;
-        }
-    }
+    didChange = applyNormalizedPreferenceChange(
+        changes,
+        WEBGPU_SCALE_KEY,
+        normalizeWebGpuScale,
+        selectedWebGpuScale,
+        (value) => { selectedWebGpuScale = value; }
+    ) || didChange;
 
-    if (hasOnnxModelChange) {
-        const nextOnnxModel = normalizeOnnxModel(changes[ONNX_MODEL_KEY].newValue);
-        if (nextOnnxModel !== selectedOnnxModel) {
-            selectedOnnxModel = nextOnnxModel;
-            didChange = true;
-        }
-    }
+    didChange = applyNormalizedPreferenceChange(
+        changes,
+        ONNX_MODEL_KEY,
+        normalizeOnnxModel,
+        selectedOnnxModel,
+        (value) => { selectedOnnxModel = value; }
+    ) || didChange;
 
     return didChange;
 }
 
-function loadSimplePresetPreference() {
+function loadNormalizedPreference({ key, defaultValue, normalize, logLabel, afterLoad, assign, logField }) {
     if (!chrome?.storage?.sync) {
         return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-        chrome.storage.sync.get({ [SIMPLE_PRESET_KEY]: DEFAULT_SIMPLE_PRESET }, (result) => {
-            selectedSimplePreset = normalizeSimplePreset(result?.[SIMPLE_PRESET_KEY]);
-            runtimeLog('preset:loaded', { selectedSimplePreset });
+        chrome.storage.sync.get({ [key]: defaultValue }, (result) => {
+            const normalized = normalize(result?.[key]);
+            assign(normalized);
+            if (typeof afterLoad === 'function') {
+                afterLoad(normalized);
+            }
+            runtimeLog(logLabel, { [logField || key]: normalized });
             resolve();
         });
+    });
+}
+
+function loadSimplePresetPreference() {
+    return loadNormalizedPreference({
+        key: SIMPLE_PRESET_KEY,
+        defaultValue: DEFAULT_SIMPLE_PRESET,
+        normalize: normalizeSimplePreset,
+        logLabel: 'preset:loaded',
+        logField: 'selectedSimplePreset',
+        assign: (value) => {
+            selectedSimplePreset = value;
+        }
     });
 }
 
 function loadEngineBackendPreference() {
-    if (!chrome?.storage?.sync) {
-        return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-        chrome.storage.sync.get({ [ENGINE_BACKEND_KEY]: DEFAULT_ENGINE_BACKEND }, (result) => {
-            selectedEngineBackend = normalizeEngineBackend(result?.[ENGINE_BACKEND_KEY]);
+    return loadNormalizedPreference({
+        key: ENGINE_BACKEND_KEY,
+        defaultValue: DEFAULT_ENGINE_BACKEND,
+        normalize: normalizeEngineBackend,
+        logLabel: 'backend:loaded',
+        logField: 'selectedEngineBackend',
+        assign: (value) => {
+            selectedEngineBackend = value;
+        },
+        afterLoad: () => {
             backendPreferenceLoaded = true;
-            runtimeLog('backend:loaded', { selectedEngineBackend });
-            resolve();
-        });
+        }
     });
 }
 
 function loadWebGpuModelPreference() {
-    if (!chrome?.storage?.sync) {
-        return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-        chrome.storage.sync.get({ [WEBGPU_MODEL_KEY]: DEFAULT_WEBGPU_MODEL }, (result) => {
-            selectedWebGpuModel = normalizeWebGpuModel(result?.[WEBGPU_MODEL_KEY]);
-            runtimeLog('webgpu-model:loaded', { selectedWebGpuModel });
-            resolve();
-        });
+    return loadNormalizedPreference({
+        key: WEBGPU_MODEL_KEY,
+        defaultValue: DEFAULT_WEBGPU_MODEL,
+        normalize: normalizeWebGpuModel,
+        logLabel: 'webgpu-model:loaded',
+        logField: 'selectedWebGpuModel',
+        assign: (value) => {
+            selectedWebGpuModel = value;
+        }
     });
 }
 
 function loadWebGpuScalePreference() {
-    if (!chrome?.storage?.sync) {
-        return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-        chrome.storage.sync.get({ [WEBGPU_SCALE_KEY]: DEFAULT_WEBGPU_SCALE }, (result) => {
-            selectedWebGpuScale = normalizeWebGpuScale(result?.[WEBGPU_SCALE_KEY]);
-            runtimeLog('webgpu-scale:loaded', { selectedWebGpuScale });
-            resolve();
-        });
+    return loadNormalizedPreference({
+        key: WEBGPU_SCALE_KEY,
+        defaultValue: DEFAULT_WEBGPU_SCALE,
+        normalize: normalizeWebGpuScale,
+        logLabel: 'webgpu-scale:loaded',
+        logField: 'selectedWebGpuScale',
+        assign: (value) => {
+            selectedWebGpuScale = value;
+        }
     });
 }
 
 function loadOnnxModelPreference() {
-    if (!chrome?.storage?.sync) {
-        return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-        chrome.storage.sync.get({ [ONNX_MODEL_KEY]: DEFAULT_ONNX_MODEL }, (result) => {
-            selectedOnnxModel = normalizeOnnxModel(result?.[ONNX_MODEL_KEY]);
-            runtimeLog('onnx-model:loaded', { selectedOnnxModel });
-            resolve();
-        });
+    return loadNormalizedPreference({
+        key: ONNX_MODEL_KEY,
+        defaultValue: DEFAULT_ONNX_MODEL,
+        normalize: normalizeOnnxModel,
+        logLabel: 'onnx-model:loaded',
+        logField: 'selectedOnnxModel',
+        assign: (value) => {
+            selectedOnnxModel = value;
+        }
     });
 }
 

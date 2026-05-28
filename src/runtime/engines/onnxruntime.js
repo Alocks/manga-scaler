@@ -115,12 +115,82 @@ function getOnnxParallelExecutionLane(baseLane, slotIndex = 0) {
     return `${normalizedLane}-${normalizedSlotIndex}`;
 }
 
+function getOnnxExecutionLanes(baseLane, maxParallelism = 1) {
+    const normalizedMaxParallelism = Number.isFinite(maxParallelism)
+        ? Math.max(1, Math.floor(maxParallelism))
+        : 1;
+
+    return Array.from({ length: normalizedMaxParallelism }, (_unused, slotIndex) => {
+        return getOnnxParallelExecutionLane(baseLane, slotIndex);
+    });
+}
+
+function getOnnxBackgroundExecutionLane(slotIndex = 0) {
+    return getOnnxParallelExecutionLane(ONNX_WORKER_LANE_BACKGROUND, slotIndex);
+}
+
+function getOnnxBackgroundQueueMaxConcurrency(runtimeSettings = getRuntimePreferenceSnapshot()) {
+    const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
+
+    let configured = 1;
+    if (typeof resolveOnnxModelByKey === 'function') {
+        const model = resolveOnnxModelByKey(settings.selectedOnnxModel);
+        configured = Number(model?.queueParallelImages);
+    } else if (typeof onnxActiveModel === 'object' && onnxActiveModel) {
+        configured = Number(onnxActiveModel.queueParallelImages);
+    }
+
+    const normalized = Number.isFinite(configured) ? Math.floor(configured) : 1;
+    return Math.max(1, normalized);
+}
+
 function getOnnxWorkerLaneState(lane = ONNX_WORKER_LANE_FOREGROUND) {
     const normalizedLane = normalizeOnnxExecutionLane(lane);
     if (!onnxWorkerLaneStates[normalizedLane]) {
         onnxWorkerLaneStates[normalizedLane] = createOnnxWorkerLaneState();
     }
     return onnxWorkerLaneStates[normalizedLane];
+}
+
+function getOnnxInitRetryDelayMs(consecutiveInitFailures) {
+    const failures = Number.isFinite(consecutiveInitFailures)
+        ? Math.max(1, Math.floor(consecutiveInitFailures))
+        : 1;
+
+    return Math.min(
+        ONNX_INIT_RETRY_MAX_DELAY_MS,
+        ONNX_INIT_RETRY_BASE_DELAY_MS * Math.pow(2, Math.max(0, failures - 1))
+    );
+}
+
+function applyOnnxWorkerInitSuccess(laneState, lane, selectedProvider) {
+    laneState.initialized = true;
+    laneState.selectedProvider = selectedProvider || 'wasm-worker';
+    laneState.consecutiveInitFailures = 0;
+    laneState.blockedUntilMs = 0;
+
+    if (lane === ONNX_WORKER_LANE_FOREGROUND) {
+        onnxInitialized = true;
+        onnxSelectedProvider = laneState.selectedProvider;
+    }
+}
+
+function applyOnnxWorkerInitFailure(laneState, lane, startedAt, error) {
+    laneState.consecutiveInitFailures = (laneState.consecutiveInitFailures || 0) + 1;
+    const delayMs = getOnnxInitRetryDelayMs(laneState.consecutiveInitFailures);
+    laneState.blockedUntilMs = getOnnxNow() + delayMs;
+
+    runtimeLog('onnx:init-failed', {
+        lane,
+        model: onnxActiveModel.label,
+        modelPath: onnxActiveModel.modelPath,
+        durationMs: formatOnnxDurationMs(startedAt),
+        consecutiveInitFailures: laneState.consecutiveInitFailures,
+        retryBlockedForMs: delayMs,
+        error: serializeOnnxError(error)
+    });
+
+    resetOnnxWorkerState(lane);
 }
 
 function serializeOnnxError(error) {
@@ -151,37 +221,9 @@ function formatOnnxDurationMs(startAt, endAt = getOnnxNow()) {
     return Number((endAt - startAt).toFixed(2));
 }
 
-function getOnnxWasmPathDiagnostics(lib) {
-    const wasmConfig = lib?.env?.wasm;
-    const wasmPaths = wasmConfig?.wasmPaths;
-
-    if (!wasmPaths) {
-        return { configured: false, kind: 'none', keys: [] };
-    }
-
-    if (typeof wasmPaths === 'string') {
-        return { configured: true, kind: 'string', keys: [wasmPaths] };
-    }
-
-    if (typeof wasmPaths === 'object') {
-        return { configured: true, kind: 'object', keys: Object.keys(wasmPaths) };
-    }
-
-    return { configured: true, kind: typeof wasmPaths, keys: [] };
-}
-
 function getOnnxLibrary() {
     const lib = window.ort;
     return lib && typeof lib === 'object' ? lib : null;
-}
-
-function isOnnxLibrarySupported(lib) {
-    return (
-        !!lib &&
-        !!lib.InferenceSession &&
-        typeof lib.InferenceSession.create === 'function' &&
-        typeof lib.Tensor === 'function'
-    );
 }
 
 function getOnnxModelUrl() {
@@ -366,6 +408,18 @@ function resetOnnxWorkerState(lane = ONNX_WORKER_LANE_FOREGROUND, terminate = tr
         onnxInitialized = false;
         onnxSelectedProvider = null;
     }
+}
+
+function resetOnnxWorkerLanes(lanes = [], terminate = true) {
+    for (const lane of lanes) {
+        resetOnnxWorkerState(lane, terminate);
+    }
+}
+
+function resetOnnxBackgroundWorkerLanes(maxParallelism = 1) {
+    const lanes = getOnnxExecutionLanes(ONNX_WORKER_LANE_BACKGROUND, maxParallelism);
+    resetOnnxWorkerLanes(lanes, true);
+    return lanes.length;
 }
 
 function createOnnxWorkerBootstrapUrl() {
@@ -564,15 +618,7 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
                 initResult = await dispatchWorkerInit(true);
             }
 
-            laneState.initialized = true;
-            laneState.selectedProvider = initResult?.provider || 'wasm-worker';
-            laneState.consecutiveInitFailures = 0;
-            laneState.blockedUntilMs = 0;
-
-            if (normalizedLane === ONNX_WORKER_LANE_FOREGROUND) {
-                onnxInitialized = true;
-                onnxSelectedProvider = laneState.selectedProvider;
-            }
+            applyOnnxWorkerInitSuccess(laneState, normalizedLane, initResult?.provider);
 
             runtimeLog('onnx:init', {
                 lane: normalizedLane,
@@ -584,23 +630,7 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
 
             return initResult;
         } catch (error) {
-            laneState.consecutiveInitFailures = (laneState.consecutiveInitFailures || 0) + 1;
-            const delayMs = Math.min(
-                ONNX_INIT_RETRY_MAX_DELAY_MS,
-                ONNX_INIT_RETRY_BASE_DELAY_MS * Math.pow(2, Math.max(0, laneState.consecutiveInitFailures - 1))
-            );
-            laneState.blockedUntilMs = getOnnxNow() + delayMs;
-
-            runtimeLog('onnx:init-failed', {
-                lane: normalizedLane,
-                model: onnxActiveModel.label,
-                modelPath: onnxActiveModel.modelPath,
-                durationMs: formatOnnxDurationMs(startedAt),
-                consecutiveInitFailures: laneState.consecutiveInitFailures,
-                retryBlockedForMs: delayMs,
-                error: serializeOnnxError(error)
-            });
-            resetOnnxWorkerState(normalizedLane);
+            applyOnnxWorkerInitFailure(laneState, normalizedLane, startedAt, error);
             throw error;
         } finally {
             laneState.readyPromise = null;
@@ -750,6 +780,7 @@ async function loadOnnxArtifacts(options = {}) {
 }
 
 function getOnnxPreprocessContext(width, height) {
+    const lib = getOnnxLibrary();
     if (!lib?.env || !chrome?.runtime?.getURL) return;
 
     const distPath = chrome.runtime.getURL('node_modules/onnxruntime-web/dist/');
@@ -1085,11 +1116,10 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
     const tileColumns = Math.ceil(sourceWidth / coreStep);
     const tileRows = Math.ceil(sourceHeight / coreStep);
     const maxTileParallelism = Math.max(1, Math.floor(ONNX_TILE_MAX_PARALLELISM));
+    const tileExecutionLanes = getOnnxExecutionLanes(executionLane, maxTileParallelism);
 
     await Promise.all(
-        Array.from({ length: maxTileParallelism }, (_unused, slotIndex) => {
-            return ensureOnnxWorkerReady(getOnnxParallelExecutionLane(executionLane, slotIndex));
-        })
+        tileExecutionLanes.map((lane) => ensureOnnxWorkerReady(lane))
     );
 
     const destCtx = outputCanvas.getContext('2d', { alpha: true, desynchronized: true });
@@ -1162,7 +1192,7 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
     }
 
     async function processTile(tileSpec, slotIndex, tileIndex) {
-        const tileExecutionLane = getOnnxParallelExecutionLane(executionLane, slotIndex);
+        const tileExecutionLane = tileExecutionLanes[slotIndex] || executionLane;
         const tileInputCanvas = getOnnxReusableWorkingCanvas(`tile-input-${slotIndex}`, tileEdge, tileEdge, tileExecutionLane);
         const tileOutputCanvas = getOnnxReusableWorkingCanvas(`tile-output-${slotIndex}`, tileEdge, tileEdge, tileExecutionLane);
 
@@ -1237,7 +1267,7 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
         await processTile(tileSpecs[0], 0, 1);
 
         let nextTileSpecIndex = 1;
-        const tileWorkers = Array.from({ length: maxTileParallelism }, async (_unused, slotIndex) => {
+        const tileWorkers = Array.from({ length: tileExecutionLanes.length }, async (_unused, slotIndex) => {
             while (nextTileSpecIndex < tileSpecs.length) {
                 const tileIndex = nextTileSpecIndex + 1;
                 const tileSpec = tileSpecs[nextTileSpecIndex];
@@ -1373,9 +1403,7 @@ async function prewarmOnnx(runtimeSettings = getRuntimePreferenceSnapshot()) {
 
 function resetOnnxAdapterState() {
     const laneKeys = Object.keys(onnxWorkerLaneStates);
-    for (const laneKey of laneKeys) {
-        resetOnnxWorkerState(laneKey);
-    }
+    resetOnnxWorkerLanes(laneKeys, true);
 
     for (const laneKey of laneKeys) {
         delete onnxWorkerLaneStates[laneKey];
@@ -1396,7 +1424,10 @@ function isOnnxRuntimeSupported() {
     return typeof Worker === 'function' && !!chrome?.runtime?.getURL;
 }
 
-window.OnnxRuntimeAdapter = createLibraryBackedEngineAdapter({
+window.resetOnnxWorkerState = resetOnnxWorkerState;
+window.resetOnnxBackgroundWorkerLanes = resetOnnxBackgroundWorkerLanes;
+
+const onnxRuntimeAdapter = createLibraryBackedEngineAdapter({
     getLibrary: () => window,
     isLibrarySupported: isOnnxRuntimeSupported,
     upscale: runOnnxUpscale,
@@ -1405,3 +1436,9 @@ window.OnnxRuntimeAdapter = createLibraryBackedEngineAdapter({
     isInitialized: () => onnxInitialized,
     isRuntimeSupported: isOnnxRuntimeSupported
 });
+
+onnxRuntimeAdapter.getBackgroundExecutionLane = getOnnxBackgroundExecutionLane;
+onnxRuntimeAdapter.getBackgroundQueueMaxConcurrency = getOnnxBackgroundQueueMaxConcurrency;
+onnxRuntimeAdapter.resetBackgroundWorkers = resetOnnxBackgroundWorkerLanes;
+
+window.OnnxRuntimeAdapter = onnxRuntimeAdapter;

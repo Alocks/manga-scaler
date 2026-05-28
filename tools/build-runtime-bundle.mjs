@@ -6,47 +6,41 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const repoRoot = resolve(__dirname, '..');
 
-const runtimeCoreFiles = [
-  'src/runtime/core/config.js',
-  'src/runtime/core/url-utils.js',
-  'src/runtime/core/cache.js'
-];
+const runtimeSourceGroups = Object.freeze({
+  core: [
+    'src/runtime/core/config.js',
+    'src/runtime/core/url-utils.js',
+    'src/runtime/core/cache.js'
+  ],
+  sources: [
+    'src/runtime/sources/base_source.js',
+    'src/runtime/sources/nhentai.js',
+    'src/runtime/sources/comix.js',
+    'src/runtime/sources/mangadex.js',
+    'src/runtime/sources/mangakakalot_manganato.js'
+  ],
+  shaderFactories: [
+    'src/runtime/factories/shaders/shader_factory.js',
+    'src/runtime/factories/shaders/anime4k_webgpu.js'
+  ],
+  engines: [
+    'src/runtime/engines/base_engine.js',
+    'src/runtime/engines/onnx-models.js',
+    'src/runtime/engines/onnxruntime.js',
+    'src/runtime/engines/webgl.js',
+    'src/runtime/engines/webgpu.js'
+  ],
+  pipeline: [
+    'src/runtime/core/engine.js',
+    'src/runtime/core/dom.js',
+    'src/runtime/core/queue.js',
+    'src/runtime/core/orchestrator.js'
+  ]
+});
 
-const sourceAdapterFiles = [
-  'src/runtime/sources/base_source.js',
-  'src/runtime/sources/nhentai.js',
-  'src/runtime/sources/comix.js',
-  'src/runtime/sources/mangadex.js',
-  'src/runtime/sources/mangakakalot_manganato.js'
-];
-
-const runtimeShaderFactoryFiles = [
-  'src/runtime/factories/shaders/shader_factory.js',
-  'src/runtime/factories/shaders/anime4k_webgpu.js'
-];
-
-const engineAdapterFiles = [
-  'src/runtime/engines/base_engine.js',
-  'src/runtime/engines/onnx-models.js',
-  'src/runtime/engines/onnxruntime.js',
-  'src/runtime/engines/webgl.js',
-  'src/runtime/engines/webgpu.js'
-];
-
-const runtimePipelineFiles = [
-  'src/runtime/core/engine.js',
-  'src/runtime/core/dom.js',
-  'src/runtime/core/queue.js',
-  'src/runtime/core/orchestrator.js'
-];
-
-const runtimeSourceFiles = [
-  ...runtimeCoreFiles,
-  ...sourceAdapterFiles,
-  ...runtimeShaderFactoryFiles,
-  ...engineAdapterFiles,
-  ...runtimePipelineFiles
-];
+const runtimeSourceFiles = Object.freeze(
+  Object.values(runtimeSourceGroups).flat()
+);
 
 const outputFile = 'src/runtime/runtime.bundle.js';
 const shouldCheck = process.argv.includes('--check');

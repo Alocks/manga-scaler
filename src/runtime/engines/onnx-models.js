@@ -16,6 +16,7 @@
 //   tileOverlapPixels     Eoverlap border added on each side of a tile to reduce seam artifacts
 //   minTileEdgePixels     Eminimum tile edge in pixels
 //   maxTileEdgePixels     Emaximum tile edge in pixels
+//   queueParallelImages   max concurrent background queue images for this model (1 = serialized)
 
 const REALESRGAN_2XPLUS_ONNX_MODEL = {
     key: 'realesrgan-2xplus',
@@ -32,7 +33,8 @@ const REALESRGAN_2XPLUS_ONNX_MODEL = {
     maxForegroundPixels: 3145728,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 464
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1
 };
 
 const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
@@ -50,7 +52,8 @@ const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
     maxForegroundPixels: 3145728,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 464
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1
 };
 
 const UP2X_LATEST_DENOISE1X_ONNX_MODEL = {
@@ -68,7 +71,8 @@ const UP2X_LATEST_DENOISE1X_ONNX_MODEL = {
     maxForegroundPixels: 3145728,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 464
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1
 };
 
 const ANIMESHARP_V2_MOSR_ONNX_MODEL = {
@@ -86,7 +90,8 @@ const ANIMESHARP_V2_MOSR_ONNX_MODEL = {
     maxForegroundPixels: 3145728,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 464
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1
 };
 
 const ANIMESHARP_V2_RPLKSR_ONNX_MODEL = {
@@ -104,7 +109,8 @@ const ANIMESHARP_V2_RPLKSR_ONNX_MODEL = {
     maxForegroundPixels: 3145728,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 464
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1
 };
 
 const REALESR_ANIMEVIDEO_V3_ONNX_MODEL = {
@@ -122,7 +128,8 @@ const REALESR_ANIMEVIDEO_V3_ONNX_MODEL = {
     maxForegroundPixels: 3145728,
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 464
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1
 };
 
 const MANGAJANAI_1200P_V1_ONNX_MODEL = {
@@ -142,7 +149,8 @@ const MANGAJANAI_1200P_V1_ONNX_MODEL = {
     // Aggressive profile: lower overlap reduces duplicated border compute per tile.
     tileOverlapPixels: 8,
     minTileEdgePixels: 128,
-    maxTileEdgePixels: 464
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1
 };
 
 const DEFAULT_ONNX_MODEL_KEY = REALESRGAN_2XPLUS_ONNX_MODEL.key;

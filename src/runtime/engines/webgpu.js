@@ -19,6 +19,18 @@ let webgpuTiledComposeCache = null;
 let webgpuTiledInputScratchCache = null;
 const WEBGPU_TILE_INPUT_SCRATCH_SIZE = 1024;
 
+function destroyWebGpuTexture(texture) {
+    try {
+        texture?.destroy?.();
+    } catch {}
+}
+
+function closeWebGpuImageBitmap(bitmap) {
+    try {
+        bitmap?.close?.();
+    } catch {}
+}
+
 async function getWebGpuDevice() {
     if (webgpuDevicePromise) return webgpuDevicePromise;
 
@@ -122,14 +134,10 @@ function disposeWebGpuProcessingEntry(entry) {
     } catch {}
 
     if (entry.ownsInputTexture !== false) {
-        try {
-            entry.inputTexture?.destroy?.();
-        } catch {}
+        destroyWebGpuTexture(entry.inputTexture);
     }
 
-    try {
-        entry.outputTexture?.destroy?.();
-    } catch {}
+    destroyWebGpuTexture(entry.outputTexture);
 }
 
 function touchWebGpuProcessingEntry(entry) {
@@ -184,9 +192,7 @@ function setWebGpuProcessingCacheEntry(cacheKey, entry) {
 function disposeWebGpuTiledComposeCache() {
     if (!webgpuTiledComposeCache) return;
 
-    try {
-        webgpuTiledComposeCache.texture?.destroy?.();
-    } catch {}
+    destroyWebGpuTexture(webgpuTiledComposeCache.texture);
 
     webgpuTiledComposeCache = null;
 }
@@ -194,9 +200,7 @@ function disposeWebGpuTiledComposeCache() {
 function disposeWebGpuTiledInputScratchCache() {
     if (!webgpuTiledInputScratchCache) return;
 
-    try {
-        webgpuTiledInputScratchCache.texture?.destroy?.();
-    } catch {}
+    destroyWebGpuTexture(webgpuTiledInputScratchCache.texture);
 
     webgpuTiledInputScratchCache = null;
 }
@@ -271,9 +275,7 @@ function disposeWebGpuPreparedImageBitmapCache() {
     if (webgpuPreparedImageBitmapCache.size <= 0) return;
 
     for (const cached of webgpuPreparedImageBitmapCache.values()) {
-        try {
-            cached.bitmap?.close?.();
-        } catch {}
+        closeWebGpuImageBitmap(cached.bitmap);
     }
 
     webgpuPreparedImageBitmapCache.clear();
@@ -325,9 +327,7 @@ async function createWebGpuUploadSource(sourceImage) {
             });
 
             if (cached?.bitmap && cached.bitmap !== bitmap) {
-                try {
-                    cached.bitmap.close?.();
-                } catch {}
+                closeWebGpuImageBitmap(cached.bitmap);
             }
 
             webgpuPreparedImageBitmapCache.set(sourceImage, { cacheKey, bitmap });
@@ -350,9 +350,7 @@ async function createWebGpuUploadSource(sourceImage) {
             source: bitmap,
             sourceType: 'imageBitmap',
             dispose() {
-                try {
-                    bitmap.close?.();
-                } catch {}
+                closeWebGpuImageBitmap(bitmap);
             }
         };
     } catch {

@@ -160,17 +160,6 @@ function logQueueEvent(label, sourceUrl, extra = {}) {
     });
 }
 
-function isStaleForegroundJob(img, jobId, sourceUrl, parent) {
-    const latestSrc = getImageSourceUrl(img);
-    return (
-        !isForegroundTab() ||
-        !img.isConnected ||
-        img.parentElement !== parent ||
-        img.dataset.aiJobId !== jobId ||
-        latestSrc !== sourceUrl
-    );
-}
-
 function getStaleForegroundJobReason(img, jobId, sourceUrl, parent) {
     if (!isForegroundTab()) return 'hidden-tab';
     if (!img.isConnected) return 'img-disconnected';
@@ -353,7 +342,6 @@ async function processCurrentImage(container) {
     const shouldSerializeOnnxSource = effectiveBackend === 'onnx';
     if (shouldSerializeOnnxSource && onnxForegroundSourceLocks.has(sourceUrl)) {
         log('process:skip-inflight-onnx', { sourceUrl, page: getSourcePageNumber(sourceUrl) });
-        console.warn('[NH] process-skipped (already inflight):', sourceUrl.split('/').slice(-2).join('/'));
         return;
     }
 
@@ -370,7 +358,6 @@ async function processCurrentImage(container) {
     if (page == null) {
         log('process:page-missing', { sourceUrl, pageKey: getSourcePageKey(sourceUrl), jobId });
     }
-    console.log(`[NH] process-start job:${jobId} page:${page}`, sourceUrl.split('/').slice(-2).join('/'));
     log('process:start', { sourceUrl, page, jobId, backend: effectiveBackend });
 
     const canvas = document.createElement('canvas');
@@ -490,7 +477,6 @@ async function processCurrentImage(container) {
         delete img.dataset.aiProcessingSrc;
         restoreOriginalImage(img);
         log('process:error', { sourceUrl, page, jobId, error: String(err) });
-        console.error(`[NH] process-error job:${jobId} page:${page} skipped:${!!img.dataset.aiSkipSource}`, String(err));
     } finally {
         markForegroundQueueIdle();
         if (shouldSerializeOnnxSource) {
@@ -523,6 +509,11 @@ const scheduleProcess = (reason) => {
         processCurrentImage(container);
     });
 };
+
+function scheduleRuntimeRefresh(reason) {
+    scheduleProcess(reason);
+    scheduleBackgroundDiscovery(reason);
+}
 
 function scheduleBackgroundDiscovery(reason) {
     if (isRuntimeMutationSuppressed()) return;
@@ -583,8 +574,7 @@ function attachContainerObserver() {
         }
 
         if (shouldProcess) {
-            scheduleProcess(reason);
-            scheduleBackgroundDiscovery(reason);
+            scheduleRuntimeRefresh(reason);
         }
     });
 
@@ -599,8 +589,7 @@ function attachContainerObserver() {
         tag: container.tagName,
         className: container.className
     });
-    scheduleProcess('container-attached');
-    scheduleBackgroundDiscovery('container-attached');
+    scheduleRuntimeRefresh('container-attached');
 }
 
 const rootObserver = new MutationObserver((mutations) => {
@@ -647,8 +636,7 @@ document.addEventListener('visibilitychange', () => {
     if (isRuntimeMutationSuppressed()) return;
 
     attachContainerObserver();
-    scheduleProcess('visibilitychange');
-    scheduleBackgroundDiscovery('visibilitychange');
+    scheduleRuntimeRefresh('visibilitychange');
     runQueueTaskSafely(processBackgroundQueue(), 'visibilitychange-process-loop');
 });
 
@@ -679,8 +667,7 @@ if (chrome?.storage?.onChanged) {
                 return;
             }
 
-            scheduleProcess('preset-changed');
-            scheduleBackgroundDiscovery('preset-changed');
+            scheduleRuntimeRefresh('preset-changed');
         }, 50);
     });
 }
@@ -741,11 +728,9 @@ setInterval(() => {
     if (hasObserverForConnectedContainer) return;
 
     attachContainerObserver();
-    scheduleProcess('interval');
-    scheduleBackgroundDiscovery('interval');
+    scheduleRuntimeRefresh('interval');
 }, SAFETY_INTERVAL_MS);
 
 attachContainerObserver();
-scheduleProcess('initial');
-scheduleBackgroundDiscovery('initial');
+scheduleRuntimeRefresh('initial');
 runBootDiagnostics(BOOT_DIAGNOSTICS_PHASE_INITIAL);

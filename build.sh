@@ -41,7 +41,11 @@ rm -rf "$DIST_DIR" "$TMP_DIR"
 mkdir -p "$DIST_DIR"
 
 echo "[build] Installing npm dependencies..."
-npm install
+if [[ -f package-lock.json ]]; then
+  npm ci
+else
+  npm install
+fi
 
 echo "[build] Building runtime bundle..."
 node tools/build-runtime-bundle.mjs

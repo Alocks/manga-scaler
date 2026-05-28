@@ -1,6 +1,12 @@
 ﻿// Dispatcher — adapter implementations are in src/runtime/engines/
 
 const REQUIRED_ADAPTER_METHODS = ['isSupported', 'upscale', 'prewarm', 'reset'];
+const DEFAULT_BACKGROUND_QUEUE_MAX_CONCURRENCY = 1;
+
+function getDefaultBackgroundExecutionLane(slotIndex) {
+    const normalizedSlot = Number.isFinite(slotIndex) ? Math.max(0, Math.floor(slotIndex)) : 0;
+    return normalizedSlot <= 0 ? 'background' : `background-${normalizedSlot}`;
+}
 
 function normalizeUpscaleResult(result) {
     if (result && typeof result === 'object' && !Array.isArray(result)) {
@@ -119,4 +125,48 @@ function resetBackendRuntimeState() {
     if (webGpuAdapter) {
         webGpuAdapter.reset();
     }
+}
+
+function resolveBackgroundQueueExecution(runtimeSettings = getRuntimePreferenceSnapshot()) {
+    const settings = getNormalizedRuntimePreferenceSnapshot(runtimeSettings);
+    const backend = getEffectiveBackend(settings);
+
+    const defaultPlan = {
+        backend,
+        maxConcurrency: DEFAULT_BACKGROUND_QUEUE_MAX_CONCURRENCY,
+        getExecutionLane: getDefaultBackgroundExecutionLane,
+        dispose() {}
+    };
+
+    if (backend !== 'onnx') {
+        return defaultPlan;
+    }
+
+    const onnxAdapter = tryGetValidatedAdapter('OnnxRuntimeAdapter');
+    if (!onnxAdapter) {
+        return defaultPlan;
+    }
+
+    const adapterConcurrency = typeof onnxAdapter.getBackgroundQueueMaxConcurrency === 'function'
+        ? Number(onnxAdapter.getBackgroundQueueMaxConcurrency(settings))
+        : DEFAULT_BACKGROUND_QUEUE_MAX_CONCURRENCY;
+    const maxConcurrency = Number.isFinite(adapterConcurrency)
+        ? Math.max(1, Math.floor(adapterConcurrency))
+        : DEFAULT_BACKGROUND_QUEUE_MAX_CONCURRENCY;
+
+    return {
+        backend,
+        maxConcurrency,
+        getExecutionLane(slotIndex) {
+            if (typeof onnxAdapter.getBackgroundExecutionLane === 'function') {
+                return onnxAdapter.getBackgroundExecutionLane(slotIndex);
+            }
+            return getDefaultBackgroundExecutionLane(slotIndex);
+        },
+        dispose() {
+            if (typeof onnxAdapter.resetBackgroundWorkers === 'function') {
+                onnxAdapter.resetBackgroundWorkers(maxConcurrency);
+            }
+        }
+    };
 }

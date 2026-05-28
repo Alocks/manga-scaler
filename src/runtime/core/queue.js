@@ -6,9 +6,10 @@ let backgroundQueue = [];
 let backgroundQueueRunPromise = null;
 const queuedSourceUrls = new Set();
 const queuedPageKeyCounts = new Map();
+const queueSourceMetaCache = new Map();
 const seenPerformanceResourceUrls = new Set();
 const BACKGROUND_QUEUE_YIELD_MS = 10;
-const BACKGROUND_QUEUE_MAX_CONCURRENCY = 1;
+const BACKGROUND_QUEUE_DEFAULT_MAX_CONCURRENCY = 1;
 const BACKGROUND_QUEUE_KICKOFF_DELAY_MS = 40;
 let backgroundQueueResetVersion = 0;
 let backgroundQueueKickoffTimerId = null;
@@ -116,13 +117,49 @@ function clearBackgroundQueue() {
     backgroundQueue = [];
     queuedSourceUrls.clear();
     queuedPageKeyCounts.clear();
+    queueSourceMetaCache.clear();
+}
+
+function getQueueSourceMeta(sourceUrl) {
+    if (typeof sourceUrl !== 'string' || !sourceUrl) {
+        return { page: null, pageKey: null };
+    }
+
+    const cached = queueSourceMetaCache.get(sourceUrl);
+    if (cached) {
+        return cached;
+    }
+
+    let page = null;
+    let pageKey = null;
+
+    if (typeof getSourceAdapterForImageUrl === 'function') {
+        const lookup = getSourceAdapterForImageUrl(sourceUrl);
+        const parsed = lookup?.parsed;
+        if (parsed) {
+            const parsedPage = Number(parsed.page);
+            page = Number.isFinite(parsedPage) ? parsedPage : null;
+            pageKey = parsed.pageKey || null;
+        }
+    }
+
+    if (page == null && typeof getSourcePageNumber === 'function') {
+        page = getSourcePageNumber(sourceUrl);
+    }
+    if (!pageKey && typeof getSourcePageKey === 'function') {
+        pageKey = getSourcePageKey(sourceUrl);
+    }
+
+    const meta = { page, pageKey };
+    queueSourceMetaCache.set(sourceUrl, meta);
+    return meta;
 }
 
 function enqueueBackgroundQueueUrl(sourceUrl) {
     backgroundQueue.push(sourceUrl);
     queuedSourceUrls.add(sourceUrl);
 
-    const pageKey = getSourcePageKey(sourceUrl);
+    const { pageKey } = getQueueSourceMeta(sourceUrl);
     if (!pageKey) return;
     queuedPageKeyCounts.set(pageKey, (queuedPageKeyCounts.get(pageKey) || 0) + 1);
 }
@@ -133,7 +170,7 @@ function dequeueBackgroundQueueUrlAt(index) {
     const [sourceUrl] = backgroundQueue.splice(index, 1);
     queuedSourceUrls.delete(sourceUrl);
 
-    const pageKey = getSourcePageKey(sourceUrl);
+    const { pageKey } = getQueueSourceMeta(sourceUrl);
     if (pageKey) {
         const nextCount = (queuedPageKeyCounts.get(pageKey) || 0) - 1;
         if (nextCount > 0) {
@@ -150,11 +187,11 @@ function getNextBackgroundQueueIndex() {
     if (backgroundQueue.length === 0) return -1;
 
     let bestIndex = 0;
-    const firstPage = getSourcePageNumber(backgroundQueue[0]);
+    const firstPage = getQueueSourceMeta(backgroundQueue[0]).page;
     let bestRank = firstPage == null ? Number.POSITIVE_INFINITY : firstPage;
 
     for (let i = 1; i < backgroundQueue.length; i++) {
-        const page = getSourcePageNumber(backgroundQueue[i]);
+        const page = getQueueSourceMeta(backgroundQueue[i]).page;
         const rank = page == null ? Number.POSITIVE_INFINITY : page;
         if (rank < bestRank) {
             bestRank = rank;
@@ -175,10 +212,10 @@ function getQueueConflictReason(url, runtimeSettings) {
     const activeUrl = getActiveForegroundSourceUrl();
     if (url === activeUrl) return 'active-image';
 
-    const key = getSourcePageKey(url);
-    if (key && processedPageKeys.has(key)) return 'page-already-processed';
-    if (key && inFlightPageKeys.has(key)) return 'page-in-flight';
-    if (key && queuedPageKeyCounts.has(key)) return 'page-already-queued';
+    const { pageKey } = getQueueSourceMeta(url);
+    if (pageKey && processedPageKeys.has(pageKey)) return 'page-already-processed';
+    if (pageKey && inFlightPageKeys.has(pageKey)) return 'page-in-flight';
+    if (pageKey && queuedPageKeyCounts.has(pageKey)) return 'page-already-queued';
     if (hasProcessedCacheEntry(url, runtimeSettings)) return 'memory-cache-hit';
     if (queuedSourceUrls.has(url)) return 'url-already-queued';
 
@@ -247,15 +284,6 @@ async function preprocessBackgroundImage(sourceUrl) {
     scheduleBackgroundQueueKickoff();
 }
 
-function getBackgroundExecutionLane(slotIndex) {
-    const normalizedSlot = Number.isFinite(slotIndex) ? Math.max(0, Math.floor(slotIndex)) : 0;
-    if (normalizedSlot <= 0) {
-        return 'background';
-    }
-
-    return `background-${normalizedSlot}`;
-}
-
 async function processBackgroundQueueItem(sourceUrl, runResetVersion, executionLane) {
     const itemRuntimeSettings = getRuntimePreferenceSnapshot();
 
@@ -274,8 +302,7 @@ async function processBackgroundQueueItem(sourceUrl, runResetVersion, executionL
         return;
     }
 
-    const page = getSourcePageNumber(sourceUrl);
-    const pageKey = getSourcePageKey(sourceUrl);
+    const { page, pageKey } = getQueueSourceMeta(sourceUrl);
     if (page == null) {
         logQueueEvent('bg-process:page-missing', sourceUrl);
     }
@@ -367,6 +394,8 @@ async function processBackgroundQueue() {
         return backgroundQueueRunPromise;
     }
 
+    let runQueueExecution = resolveBackgroundQueueExecution();
+
     backgroundQueueRunPromise = (async () => {
     const runResetVersion = backgroundQueueResetVersion;
 
@@ -397,7 +426,8 @@ async function processBackgroundQueue() {
 
     log('bg-queue:start', { queueSize: backgroundQueue.length });
 
-    const maxConcurrency = Math.max(1, Math.floor(BACKGROUND_QUEUE_MAX_CONCURRENCY));
+    runQueueExecution = resolveBackgroundQueueExecution(queueRuntimeSettings);
+    const maxConcurrency = runQueueExecution.maxConcurrency || BACKGROUND_QUEUE_DEFAULT_MAX_CONCURRENCY;
     const activeTasks = new Set();
     let nextLaneSlot = 0;
     let pausedForHiddenTab = false;
@@ -435,7 +465,7 @@ async function processBackgroundQueue() {
                 continue;
             }
 
-            const executionLane = getBackgroundExecutionLane(nextLaneSlot % maxConcurrency);
+            const executionLane = runQueueExecution.getExecutionLane(nextLaneSlot % maxConcurrency);
             nextLaneSlot += 1;
 
             logQueueEvent('bg-queue:dequeued', sourceUrl, {
@@ -473,18 +503,16 @@ async function processBackgroundQueue() {
 
     })();
 
-    // After all background jobs are done, dispose ONNX background worker/session to free VRAM
-    try {
-        if (typeof window.resetOnnxWorkerState === 'function') {
-            window.resetOnnxWorkerState('background');
-        }
-    } catch (err) {
-        log('bg-queue:onnx-dispose-error', { error: String(err) });
-    }
-
     try {
         return await backgroundQueueRunPromise;
     } finally {
+        // After all background jobs are done, dispose ONNX background workers/sessions to free VRAM.
+        try {
+            runQueueExecution.dispose();
+        } catch (err) {
+            log('bg-queue:onnx-dispose-error', { error: String(err) });
+        }
+
         backgroundQueueRunPromise = null;
         log('bg-queue:idle', { queueSize: backgroundQueue.length });
     }

@@ -33,7 +33,11 @@ if exist "%TMP_DIR%" (
 mkdir "%DIST_DIR%" || goto :fail
 
 echo [build] Installing npm dependencies...
-call npm install || goto :fail
+if exist package-lock.json (
+  call npm ci || goto :fail
+) else (
+  call npm install || goto :fail
+)
 
 echo [build] Building runtime bundle...
 call node tools\build-runtime-bundle.mjs || goto :fail

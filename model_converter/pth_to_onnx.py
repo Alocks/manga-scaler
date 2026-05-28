@@ -626,8 +626,14 @@ def convert_realcugan_up2x_to_onnx(
     print(f"Conversion complete! Generated dynamic model: {onnx_output_path}")
 
 
-def convert_realesrgan_x2plus_to_onnx():
-    pth_path = Path("realesrgan_x2plus.pth")
+def _convert_dynamic_model_from_checkpoint(
+    pth_path: Path,
+    build_models,
+    *,
+    state_dict_transform=None,
+    strict: bool = True,
+    onnx_output_path: str = None,
+):
     if not pth_path.exists():
         print(f"Skipping missing checkpoint: {pth_path}")
         return
@@ -635,135 +641,108 @@ def convert_realesrgan_x2plus_to_onnx():
     print(f"Loading weights from {pth_path}...")
     checkpoint = torch.load(pth_path, map_location=torch.device('cpu'))
     state_dict = _extract_state_dict(checkpoint)
+    if callable(state_dict_transform):
+        state_dict = state_dict_transform(state_dict)
 
-    model = RRDBNet(
-        num_in_ch=3,
-        num_out_ch=3,
-        num_feat=64,
-        num_block=23,
-        num_grow_ch=32,
-        scale=2,
+    load_model, export_model = build_models()
+    load_model.load_state_dict(state_dict, strict=strict)
+    load_model.eval()
+    if export_model is not load_model:
+        export_model.eval()
+
+    output_path = onnx_output_path or f"{pth_path.stem}.onnx"
+    _export_dynamic_onnx(_ClampedModel(export_model), output_path)
+    _postprocess_onnx_for_web(output_path)
+    print(f"Conversion complete! Generated dynamic model: {output_path}")
+
+
+def convert_realesrgan_x2plus_to_onnx():
+    def build_models():
+        model = RRDBNet(
+            num_in_ch=3,
+            num_out_ch=3,
+            num_feat=64,
+            num_block=23,
+            num_grow_ch=32,
+            scale=2,
+        )
+        return model, model
+
+    _convert_dynamic_model_from_checkpoint(
+        Path("realesrgan_x2plus.pth"),
+        build_models,
     )
-    model.load_state_dict(state_dict, strict=True)
-    model.eval()
-
-    onnx_output_path = f"{pth_path.stem}.onnx"
-    _export_dynamic_onnx(_ClampedModel(model), onnx_output_path)
-    _postprocess_onnx_for_web(onnx_output_path)
-    print(f"Conversion complete! Generated dynamic model: {onnx_output_path}")
 
 
 def convert_realesr_animevideov3_to_onnx(pth_path: Path):
-    if not pth_path.exists():
-        print(f"Skipping missing checkpoint: {pth_path}")
-        return
+    def build_models():
+        # realesr-animevideov3 is a native x4 SRVGG model (16 conv blocks).
+        # Export a 2x graph by adding a final 0.5x resize after native output.
+        base_model = SRVGGNetCompact(
+            num_in_ch=3,
+            num_out_ch=3,
+            num_feat=64,
+            num_conv=16,
+            upscale=4,
+            act_type='prelu',
+        )
+        return base_model, _ScaledOutputModel(base_model, scale_factor=0.5)
 
-    print(f"Loading weights from {pth_path}...")
-    checkpoint = torch.load(pth_path, map_location=torch.device('cpu'))
-    state_dict = _extract_state_dict(checkpoint)
-
-    # realesr-animevideov3 is a native x4 SRVGG model (16 conv blocks).
-    # Export a 2x graph by adding a final 0.5x resize after native output.
-    model = SRVGGNetCompact(
-        num_in_ch=3,
-        num_out_ch=3,
-        num_feat=64,
-        num_conv=16,
-        upscale=4,
-        act_type='prelu',
-    )
-    model.load_state_dict(state_dict, strict=True)
-    model.eval()
-
-    model_2x = _ScaledOutputModel(model, scale_factor=0.5)
-    onnx_output_path = f"{pth_path.stem}.onnx"
-    _export_dynamic_onnx(_ClampedModel(model_2x), onnx_output_path)
-    _postprocess_onnx_for_web(onnx_output_path)
-    print(f"Conversion complete! Generated dynamic model: {onnx_output_path}")
+    _convert_dynamic_model_from_checkpoint(pth_path, build_models)
 
 
 def convert_mangajanai_to_onnx(pth_path: Path):
-    if not pth_path.exists():
-        print(f"Skipping missing checkpoint: {pth_path}")
-        return
+    def build_models():
+        model = RRDBNet(
+            num_in_ch=3,
+            num_out_ch=3,
+            num_feat=64,
+            num_block=23,
+            num_grow_ch=32,
+            scale=2,
+        )
+        return model, model
 
-    print(f"Loading weights from {pth_path}...")
-    checkpoint = torch.load(pth_path, map_location=torch.device('cpu'))
-    state_dict = _extract_state_dict(checkpoint)
-    state_dict = _remap_old_esrgan_keys(state_dict)
-
-    model = RRDBNet(
-        num_in_ch=3,
-        num_out_ch=3,
-        num_feat=64,
-        num_block=23,
-        num_grow_ch=32,
-        scale=2,
+    _convert_dynamic_model_from_checkpoint(
+        pth_path,
+        build_models,
+        state_dict_transform=_remap_old_esrgan_keys,
     )
-    model.load_state_dict(state_dict, strict=True)
-    model.eval()
-
-    onnx_output_path = f"{pth_path.stem}.onnx"
-    _export_dynamic_onnx(_ClampedModel(model), onnx_output_path)
-    _postprocess_onnx_for_web(onnx_output_path)
-    print(f"Conversion complete! Generated dynamic model: {onnx_output_path}")
 
 
 def convert_mosr_gps_to_onnx(pth_path: Path):
-    if not pth_path.exists():
-        print(f"Skipping missing checkpoint: {pth_path}")
-        return
+    def build_models():
+        model = MoSRGPS(
+            in_ch=3,
+            out_ch=3,
+            dim=64,
+            n_block=24,
+            upscale=2,
+            kernel_size=7,
+            expansion_ratio=1.5,
+            conv_ratio=1.0,
+        )
+        return model, model
 
-    print(f"Loading weights from {pth_path}...")
-    checkpoint = torch.load(pth_path, map_location=torch.device('cpu'))
-    state_dict = _extract_state_dict(checkpoint)
-
-    model = MoSRGPS(
-        in_ch=3,
-        out_ch=3,
-        dim=64,
-        n_block=24,
-        upscale=2,
-        kernel_size=7,
-        expansion_ratio=1.5,
-        conv_ratio=1.0,
-    )
-    model.load_state_dict(state_dict, strict=True)
-    model.eval()
-
-    onnx_output_path = f"{pth_path.stem}.onnx"
-    _export_dynamic_onnx(_ClampedModel(model), onnx_output_path)
-    _postprocess_onnx_for_web(onnx_output_path)
-    print(f"Conversion complete! Generated dynamic model: {onnx_output_path}")
+    _convert_dynamic_model_from_checkpoint(pth_path, build_models)
 
 
 def convert_realplksr_to_onnx(pth_path: Path):
-    if not pth_path.exists():
-        print(f"Skipping missing checkpoint: {pth_path}")
-        return
+    def build_models():
+        model = RealPLKSR(
+            in_ch=3,
+            out_ch=3,
+            dim=64,
+            n_blocks=28,
+            upscaling_factor=2,
+            kernel_size=17,
+            split_ratio=0.25,
+            use_ea=True,
+            norm_groups=4,
+        )
+        return model, model
 
-    print(f"Loading weights from {pth_path}...")
-    checkpoint = torch.load(pth_path, map_location=torch.device('cpu'))
-    state_dict = _extract_state_dict(checkpoint)
-
-    model = RealPLKSR(
-        in_ch=3,
-        out_ch=3,
-        dim=64,
-        n_blocks=28,
-        upscaling_factor=2,
-        kernel_size=17,
-        split_ratio=0.25,
-        use_ea=True,
-        norm_groups=4,
-    )
-    model.load_state_dict(state_dict, strict=True)
-    model.eval()
-
-    onnx_output_path = f"{pth_path.stem}.onnx"
-    _export_dynamic_onnx(_ClampedModel(model), onnx_output_path)
-    _postprocess_onnx_for_web(onnx_output_path)
-    print(f"Conversion complete! Generated dynamic model: {onnx_output_path}")
+    _convert_dynamic_model_from_checkpoint(pth_path, build_models)
 
 
 if __name__ == "__main__":
