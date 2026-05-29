@@ -33,9 +33,10 @@ If you choose to use them in other applications USE AT YOUR OWN RISK.*
 - **Intel 11th Gen or newer**
 
 ## Models available for ONNX
-- **RealESRGAN 2x+**
 - **RealESR AnimeVideo v3**
 - **MangaJaNai 2x 1200p V1**
+- **MangaJaNai 2x 1600p V1**
+- **IllustrationJaNai_V1_ESRGAN_129k.onnx**
 - **RealCUGAN Conservative**
 - **RealCUGAN 2X Latest Denoise 1x**
 

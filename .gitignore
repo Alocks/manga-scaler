@@ -150,3 +150,5 @@ _metadata/
 src/runtime/runtime.bundle.js
 .vscode
 .venv
+*.pyc
+*.pth

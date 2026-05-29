@@ -15,7 +15,7 @@ document.addEventListener('visibilitychange', () => {
 
 const DEBUG = false;
 const ENABLE_WEBGPU_PROFILING = false;
-const ENABLE_ONNX_PROFILING = true;
+const ENABLE_ONNX_PROFILING = false;
 const ALWAYS_LOG_LABELS = new Set([
     'bg-process:skip-cached',
     'bg-process:upscale-time',

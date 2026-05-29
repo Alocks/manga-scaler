@@ -17,25 +17,8 @@
 //   minTileEdgePixels     Eminimum tile edge in pixels
 //   maxTileEdgePixels     Emaximum tile edge in pixels
 //   queueParallelImages   max concurrent background queue images for this model (1 = serialized)
-
-const REALESRGAN_2XPLUS_ONNX_MODEL = {
-    key: 'realesrgan-2xplus',
-    title: 'RealESRGAN 2x+',
-    label: 'REALESRGAN_2XPLUS_ONNX',
-    modelPath: 'models/RealESRGAN_x2plus.onnx',
-    externalDataPath: null,
-    externalDataPathAliases: [],
-    cacheSchemaVersion: 'v3',  // dynamic axes  Ere-export required
-    inputAlignment: 2,
-    fixedInputWidth: 0,
-    fixedInputHeight: 0,
-    maxSinglePassPixels: 1048576,
-    maxForegroundPixels: 3145728,
-    tileOverlapPixels: 16,
-    minTileEdgePixels: 128,
-    maxTileEdgePixels: 464,
-    queueParallelImages: 1
-};
+//   inputChannels         expected model input channels (usually 1 or 3)
+//   outputChannels        expected model output channels (usually 1 or 3)
 
 const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
     key: 'up2x-latest-conservative',
@@ -53,7 +36,9 @@ const UP2X_LATEST_CONSERVATIVE_ONNX_MODEL = {
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
     maxTileEdgePixels: 464,
-    queueParallelImages: 1
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
 };
 
 const UP2X_LATEST_DENOISE1X_ONNX_MODEL = {
@@ -72,45 +57,9 @@ const UP2X_LATEST_DENOISE1X_ONNX_MODEL = {
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
     maxTileEdgePixels: 464,
-    queueParallelImages: 1
-};
-
-const ANIMESHARP_V2_MOSR_ONNX_MODEL = {
-    key: 'animesharp-v2-mosr-sharp',
-    title: 'AnimeSharp V2 MoSR Sharp',
-    label: 'ANIMESHARP_V2_MOSR_SHARP_ONNX',
-    modelPath: 'models/2x-AnimeSharpV2_MoSR_Sharp.onnx',
-    externalDataPath: null,
-    externalDataPathAliases: [],
-    cacheSchemaVersion: 'v2',  // dynamic axes  Ere-export required
-    inputAlignment: 2,
-    fixedInputWidth: 0,
-    fixedInputHeight: 0,
-    maxSinglePassPixels: 1048576,
-    maxForegroundPixels: 3145728,
-    tileOverlapPixels: 16,
-    minTileEdgePixels: 128,
-    maxTileEdgePixels: 464,
-    queueParallelImages: 1
-};
-
-const ANIMESHARP_V2_RPLKSR_ONNX_MODEL = {
-    key: 'animesharp-v2-rplksr-sharp',
-    title: 'AnimeSharp V2 RPLKSR Sharp',
-    label: 'ANIMESHARP_V2_RPLKSR_SHARP_ONNX',
-    modelPath: 'models/2x-AnimeSharpV2_RPLKSR_Sharp.onnx',
-    externalDataPath: null,
-    externalDataPathAliases: [],
-    cacheSchemaVersion: 'v2',  // dynamic axes  Ere-export required
-    inputAlignment: 2,
-    fixedInputWidth: 0,
-    fixedInputHeight: 0,
-    maxSinglePassPixels: 1048576,
-    maxForegroundPixels: 3145728,
-    tileOverlapPixels: 16,
-    minTileEdgePixels: 128,
-    maxTileEdgePixels: 464,
-    queueParallelImages: 1
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
 };
 
 const REALESR_ANIMEVIDEO_V3_ONNX_MODEL = {
@@ -129,7 +78,9 @@ const REALESR_ANIMEVIDEO_V3_ONNX_MODEL = {
     tileOverlapPixels: 16,
     minTileEdgePixels: 128,
     maxTileEdgePixels: 464,
-    queueParallelImages: 1
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
 };
 
 const MANGAJANAI_1200P_V1_ONNX_MODEL = {
@@ -150,18 +101,105 @@ const MANGAJANAI_1200P_V1_ONNX_MODEL = {
     tileOverlapPixels: 8,
     minTileEdgePixels: 128,
     maxTileEdgePixels: 464,
-    queueParallelImages: 1
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
 };
 
-const DEFAULT_ONNX_MODEL_KEY = REALESRGAN_2XPLUS_ONNX_MODEL.key;
+const MANGAJANAI_1600P_V1_ONNX_MODEL = {
+    key: 'mangajanai-1600p-v1',
+    title: 'MangaJaNai 2x 1600p V1',
+    label: 'MANGAJANAI_1600P_V1_ONNX',
+    modelPath: 'models/2x_MangaJaNai_1600p_V1_ESRGAN_90k.onnx',
+    externalDataPath: null,
+    externalDataPathAliases: [],
+    cacheSchemaVersion: 'v4',
+    inputAlignment: 2,
+    fixedInputWidth: 0,
+    fixedInputHeight: 0,
+    maxSinglePassPixels: 1048576,
+    maxForegroundPixels: 3145728,
+    tileOverlapPixels: 8,
+    minTileEdgePixels: 128,
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
+};
+
+const ILLUSTRATIONJANAI_V1_ONNX_MODEL = {
+    key: 'illustrationjanai-v1',
+    title: 'IllustrationJaNai 2x V1',
+    label: 'ILLUSTRATIONJANAI_V1_ONNX',
+    modelPath: 'models/2x_IllustrationJaNai_V1_ESRGAN_120k.onnx',
+    externalDataPath: null,
+    externalDataPathAliases: [],
+    cacheSchemaVersion: 'v3',
+    inputAlignment: 2,
+    fixedInputWidth: 0,
+    fixedInputHeight: 0,
+    maxSinglePassPixels: 1048576,
+    maxForegroundPixels: 3145728,
+    tileOverlapPixels: 8,
+    minTileEdgePixels: 128,
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
+};
+
+const ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX_MODEL = {
+    key: 'animejanai-hd-v3sharp1-compact',
+    title: 'AnimeJaNai HD V3 Sharp1 Compact',
+    label: 'ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX',
+    modelPath: 'models/2x_AnimeJaNai_HD_V3Sharp1_Compact.onnx',
+    externalDataPath: null,
+    externalDataPathAliases: [],
+    cacheSchemaVersion: 'v3',
+    inputAlignment: 2,
+    fixedInputWidth: 0,
+    fixedInputHeight: 0,
+    maxSinglePassPixels: 1048576,
+    maxForegroundPixels: 3145728,
+    tileOverlapPixels: 8,
+    minTileEdgePixels: 128,
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
+};
+
+const ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX_MODEL = {
+    key: 'animejanai-hd-v3sharp1-superultracompact',
+    title: 'AnimeJaNai HD V3 Sharp1 SuperUltraCompact',
+    label: 'ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX',
+    modelPath: 'models/2x_AnimeJaNai_HD_V3Sharp1_SuperUltraCompact.onnx',
+    externalDataPath: null,
+    externalDataPathAliases: [],
+    cacheSchemaVersion: 'v3',
+    inputAlignment: 2,
+    fixedInputWidth: 0,
+    fixedInputHeight: 0,
+    maxSinglePassPixels: 1048576,
+    maxForegroundPixels: 3145728,
+    tileOverlapPixels: 8,
+    minTileEdgePixels: 128,
+    maxTileEdgePixels: 464,
+    queueParallelImages: 1,
+    inputChannels: 3,
+    outputChannels: 3
+};
+
+const DEFAULT_ONNX_MODEL_KEY = REALESR_ANIMEVIDEO_V3_ONNX_MODEL.key;
 
 const ONNX_MODEL_REGISTRY = Object.freeze({
-    [REALESRGAN_2XPLUS_ONNX_MODEL.key]: Object.freeze(REALESRGAN_2XPLUS_ONNX_MODEL),
     [UP2X_LATEST_CONSERVATIVE_ONNX_MODEL.key]: Object.freeze(UP2X_LATEST_CONSERVATIVE_ONNX_MODEL),
     [UP2X_LATEST_DENOISE1X_ONNX_MODEL.key]: Object.freeze(UP2X_LATEST_DENOISE1X_ONNX_MODEL),
     [MANGAJANAI_1200P_V1_ONNX_MODEL.key]: Object.freeze(MANGAJANAI_1200P_V1_ONNX_MODEL),
-    [ANIMESHARP_V2_MOSR_ONNX_MODEL.key]: Object.freeze(ANIMESHARP_V2_MOSR_ONNX_MODEL),
-    [ANIMESHARP_V2_RPLKSR_ONNX_MODEL.key]: Object.freeze(ANIMESHARP_V2_RPLKSR_ONNX_MODEL),
+    [MANGAJANAI_1600P_V1_ONNX_MODEL.key]: Object.freeze(MANGAJANAI_1600P_V1_ONNX_MODEL),
+    [ILLUSTRATIONJANAI_V1_ONNX_MODEL.key]: Object.freeze(ILLUSTRATIONJANAI_V1_ONNX_MODEL),
+    [ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX_MODEL.key]: Object.freeze(ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX_MODEL),
+    [ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX_MODEL.key]: Object.freeze(ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX_MODEL),
     [REALESR_ANIMEVIDEO_V3_ONNX_MODEL.key]: Object.freeze(REALESR_ANIMEVIDEO_V3_ONNX_MODEL)
 });
 
@@ -197,4 +235,4 @@ globalThis.getOnnxModelOptions = getOnnxModelOptions;
 
 
 // Active model used by the ONNX engine. Reassign to switch models at runtime.
-let onnxActiveModel = REALESRGAN_2XPLUS_ONNX_MODEL;
+let onnxActiveModel = REALESR_ANIMEVIDEO_V3_ONNX_MODEL;

@@ -21,6 +21,46 @@ let workerGpuDevice = null;
 let workerGpuInputBuffer = null;
 let workerGpuInputBufferByteLength = 0;
 let workerGpuInputBufferDims = null;
+let workerExpectedInputChannels = 3;
+let workerExpectedOutputChannels = 3;
+
+function normalizeWorkerChannelCount(value, fallback = 3) {
+    const numeric = Number(value);
+    if (numeric === 1 || numeric === 3) {
+        return numeric;
+    }
+
+    if (fallback == null) {
+        return null;
+    }
+
+    return Number(fallback) === 1 ? 1 : 3;
+}
+
+function resolveWorkerValueInfoMetadata(metadataCollection, tensorName) {
+    if (!metadataCollection || !tensorName) {
+        return null;
+    }
+
+    if (typeof metadataCollection.get === 'function') {
+        return metadataCollection.get(tensorName) || null;
+    }
+
+    if (typeof metadataCollection === 'object') {
+        return metadataCollection[tensorName] || null;
+    }
+
+    return null;
+}
+
+function resolveWorkerChannelsFromTensorMetadata(valueInfo) {
+    const dims = valueInfo?.dimensions || valueInfo?.dims;
+    if (Array.isArray(dims) && dims.length >= 2) {
+        return normalizeWorkerChannelCount(dims[1], null);
+    }
+
+    return null;
+}
 
 function createWorkerGpuProfileCollector() {
     return {
@@ -285,6 +325,7 @@ async function imageBufferToTensor(rgbaBuffer, width, height) {
     }
 
     if (
+        workerExpectedInputChannels === 3 &&
         workerCanUseTensorFromImage !== false &&
         typeof workerOrt?.Tensor?.fromImage === 'function' &&
         typeof ImageData === 'function'
@@ -308,13 +349,17 @@ async function imageBufferToTensor(rgbaBuffer, width, height) {
     }
 
     const pixelCount = width * height;
-    const chw = new Float32Array(pixelCount * 3);
-    writeImageBufferToChw(rgbaBuffer, width, height, chw, 0);
+    const chw = new Float32Array(pixelCount * workerExpectedInputChannels);
+    writeImageBufferToNchw(rgbaBuffer, width, height, chw, 0, workerExpectedInputChannels);
 
-    return new workerOrt.Tensor('float32', chw, [1, 3, height, width]);
+    return new workerOrt.Tensor('float32', chw, [1, workerExpectedInputChannels, height, width]);
 }
 
 async function tensorFromImageSource(imageSource, width, height, sourceLabel = 'image-source') {
+    if (workerExpectedInputChannels !== 3) {
+        return null;
+    }
+
     if (typeof workerOrt?.Tensor?.fromImage !== 'function') {
         return null;
     }
@@ -419,7 +464,7 @@ async function tryBuildWorkerGpuInputTensor(payload, width, height, expectedTens
     }
 
     const pixelCount = width * height;
-    const chw = new Float32Array(pixelCount * 3);
+    const chw = new Float32Array(pixelCount * workerExpectedInputChannels);
     let rgbaBuffer = payload.rgbaBuffer;
 
     if (!(rgbaBuffer instanceof ArrayBuffer) && payload.imageBitmap != null) {
@@ -432,7 +477,7 @@ async function tryBuildWorkerGpuInputTensor(payload, width, height, expectedTens
         return null;
     }
 
-    writeImageBufferToChw(rgbaBuffer, width, height, chw, 0);
+    writeImageBufferToNchw(rgbaBuffer, width, height, chw, 0, workerExpectedInputChannels);
     const byteLength = chw.byteLength;
     const gpuInputBuffer = ensureWorkerGpuInputBuffer(byteLength, { width, height });
     if (!gpuInputBuffer) {
@@ -444,7 +489,7 @@ async function tryBuildWorkerGpuInputTensor(payload, width, height, expectedTens
     workerGpuDevice.queue.writeBuffer(gpuInputBuffer, 0, chw.buffer, chw.byteOffset, byteLength);
 
     return workerOrt.Tensor.fromGpuBuffer(gpuInputBuffer, {
-        dims: [1, 3, height, width],
+        dims: [1, workerExpectedInputChannels, height, width],
         dataType: 'float32'
     });
 }
@@ -490,13 +535,31 @@ async function imageBitmapToTensor(imageBitmap) {
     return imageBufferToTensor(imageData.data.buffer, canvas.width, canvas.height);
 }
 
-function writeImageBufferToChw(rgbaBuffer, width, height, targetChw, targetOffset = 0) {
+function writeImageBufferToNchw(rgbaBuffer, width, height, targetChw, targetOffset = 0, channels = 3) {
     if (!(rgbaBuffer instanceof ArrayBuffer)) {
         throw new Error('ONNX worker received an invalid input pixel buffer');
     }
 
     const rgba = new Uint8Array(rgbaBuffer);
     const pixelCount = width * height;
+
+    if (channels === 1) {
+        for (let i = 0; i < pixelCount; i++) {
+            const srcOffset = i << 2;
+            const r = rgba[srcOffset];
+            const g = rgba[srcOffset + 1];
+            const b = rgba[srcOffset + 2];
+            // BT.601 luma preserves detail better than simple average for monochrome models.
+            const luma = (0.299 * r + 0.587 * g + 0.114 * b) * WORKER_BYTE_TO_UNIT_FLOAT;
+            targetChw[targetOffset + i] = luma;
+        }
+        return;
+    }
+
+    if (channels !== 3) {
+        throw new Error(`Unsupported worker ONNX input channel count: ${channels}`);
+    }
+
     const gBase = targetOffset + pixelCount;
     const bBase = targetOffset + pixelCount * 2;
 
@@ -514,7 +577,7 @@ function tensorToImageBuffer(outputTensor, batchIndex = 0) {
     }
 
     const [batch, channels, outHeight, outWidth] = outputTensor.dims;
-    if (!Number.isFinite(batch) || batch < 1 || channels < 3 || outHeight < 1 || outWidth < 1) {
+    if (!Number.isFinite(batch) || batch < 1 || (channels !== 1 && channels !== 3) || outHeight < 1 || outWidth < 1) {
         throw new Error(`Invalid worker ONNX output dims: ${JSON.stringify(outputTensor.dims)}`);
     }
 
@@ -546,17 +609,28 @@ function tensorToImageBuffer(outputTensor, batchIndex = 0) {
     // Pre-fill alpha; three sequential channel passes keep reads contiguous in NCHW memory
     // (vs interleaved reads that jump channelStride elements per pixel for large tiles)
     rgba.fill(255);
-    for (let i = 0; i < pixelCount; i++) {
-        const v = (data[rBase + i] * valueScale + 0.5) | 0;
-        rgba[i * 4] = v < 0 ? 0 : v > 255 ? 255 : v;
-    }
-    for (let i = 0; i < pixelCount; i++) {
-        const v = (data[gBase + i] * valueScale + 0.5) | 0;
-        rgba[i * 4 + 1] = v < 0 ? 0 : v > 255 ? 255 : v;
-    }
-    for (let i = 0; i < pixelCount; i++) {
-        const v = (data[bBase + i] * valueScale + 0.5) | 0;
-        rgba[i * 4 + 2] = v < 0 ? 0 : v > 255 ? 255 : v;
+    if (channels === 1) {
+        for (let i = 0; i < pixelCount; i++) {
+            const v = (data[rBase + i] * valueScale + 0.5) | 0;
+            const clamped = v < 0 ? 0 : v > 255 ? 255 : v;
+            const rgbaIndex = i * 4;
+            rgba[rgbaIndex] = clamped;
+            rgba[rgbaIndex + 1] = clamped;
+            rgba[rgbaIndex + 2] = clamped;
+        }
+    } else {
+        for (let i = 0; i < pixelCount; i++) {
+            const v = (data[rBase + i] * valueScale + 0.5) | 0;
+            rgba[i * 4] = v < 0 ? 0 : v > 255 ? 255 : v;
+        }
+        for (let i = 0; i < pixelCount; i++) {
+            const v = (data[gBase + i] * valueScale + 0.5) | 0;
+            rgba[i * 4 + 1] = v < 0 ? 0 : v > 255 ? 255 : v;
+        }
+        for (let i = 0; i < pixelCount; i++) {
+            const v = (data[bBase + i] * valueScale + 0.5) | 0;
+            rgba[i * 4 + 2] = v < 0 ? 0 : v > 255 ? 255 : v;
+        }
     }
     const pixelLoopEndAt = getWorkerNow();
 
@@ -748,7 +822,7 @@ async function runWorkerInferenceBatch(batchEntries) {
 
     entry.resolve({
         inputName,
-        inputDims: [1, 3, height, width],
+        inputDims: [1, workerExpectedInputChannels, height, width],
         outputDims: outputImage.outputDims,
         outputWidth: outputImage.outputWidth,
         outputHeight: outputImage.outputHeight,
@@ -817,6 +891,8 @@ async function ensureWorkerSession(payload) {
         workerGpuInputBuffer = null;
         workerGpuInputBufferByteLength = 0;
         workerGpuInputBufferDims = null;
+        workerExpectedInputChannels = normalizeWorkerChannelCount(payload.inputChannels, 3);
+        workerExpectedOutputChannels = normalizeWorkerChannelCount(payload.outputChannels, 3);
 
         const sessionOptions = {
             executionProviders: [{
@@ -861,6 +937,27 @@ async function ensureWorkerSession(payload) {
             workerSession = await lib.InferenceSession.create(new Uint8Array(payload.modelBytes), fallbackSessionOptions);
         }
 
+        const sessionInputName = workerSession.inputNames?.[0] || null;
+        const sessionOutputName = workerSession.outputNames?.[0] || null;
+        const inputMetadata = resolveWorkerValueInfoMetadata(workerSession.inputMetadata, sessionInputName);
+        const outputMetadata = resolveWorkerValueInfoMetadata(workerSession.outputMetadata, sessionOutputName);
+        workerExpectedInputChannels = normalizeWorkerChannelCount(
+            resolveWorkerChannelsFromTensorMetadata(inputMetadata),
+            workerExpectedInputChannels
+        );
+        workerExpectedOutputChannels = normalizeWorkerChannelCount(
+            resolveWorkerChannelsFromTensorMetadata(outputMetadata),
+            workerExpectedOutputChannels
+        );
+
+        if (workerExpectedInputChannels !== 1 && workerExpectedInputChannels !== 3) {
+            throw new Error(`Unsupported ONNX worker input channels: ${workerExpectedInputChannels}`);
+        }
+
+        if (workerExpectedOutputChannels !== 1 && workerExpectedOutputChannels !== 3) {
+            throw new Error(`Unsupported ONNX worker output channels: ${workerExpectedOutputChannels}`);
+        }
+
         payload.modelBytes = null;
         payload.externalDataBytes = null;
         workerProvider = 'webgpu-worker';
@@ -880,7 +977,11 @@ async function ensureWorkerSession(payload) {
             if (warmupInputName) {
                 const wW = Number.isFinite(payload.warmupWidth) ? Math.max(1, Math.floor(payload.warmupWidth)) : 32;
                 const wH = Number.isFinite(payload.warmupHeight) ? Math.max(1, Math.floor(payload.warmupHeight)) : 32;
-                const warmupTensor = new workerOrt.Tensor('float32', new Float32Array(wW * wH * 3), [1, 3, wH, wW]);
+                const warmupTensor = new workerOrt.Tensor(
+                    'float32',
+                    new Float32Array(wW * wH * workerExpectedInputChannels),
+                    [1, workerExpectedInputChannels, wH, wW]
+                );
                 const warmupOutputs = await workerSession.run({ [warmupInputName]: warmupTensor });
                 if (typeof warmupTensor.dispose === 'function') warmupTensor.dispose();
                 for (const t of Object.values(warmupOutputs || {})) {
@@ -891,6 +992,8 @@ async function ensureWorkerSession(payload) {
                 durationMs: formatWorkerDurationMs(warmupStartedAt),
                 warmupWidth: Number.isFinite(payload.warmupWidth) ? payload.warmupWidth : 32,
                 warmupHeight: Number.isFinite(payload.warmupHeight) ? payload.warmupHeight : 32,
+                inputChannels: workerExpectedInputChannels,
+                outputChannels: workerExpectedOutputChannels,
                 graphCaptureActive: workerGraphCaptureActive,
                 graphCaptureFailureReason: workerGraphCaptureFailureReason
             });
@@ -904,6 +1007,8 @@ async function ensureWorkerSession(payload) {
             graphCaptureEnabled: workerGraphCaptureEnabled,
             graphCaptureActive: workerGraphCaptureActive,
             graphCaptureFailureReason: workerGraphCaptureFailureReason,
+            inputChannels: workerExpectedInputChannels,
+            outputChannels: workerExpectedOutputChannels,
             inputNames: Array.isArray(workerSession?.inputNames) ? workerSession.inputNames : [],
             outputNames: Array.isArray(workerSession?.outputNames) ? workerSession.outputNames : []
         });

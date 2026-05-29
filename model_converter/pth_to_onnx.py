@@ -6,7 +6,87 @@ import onnx
 import onnxruntime as ort  # Used for direct runtime optimization
 from pathlib import Path
 from onnxconverter_common import float16  # type: ignore[reportMissingImports]
-from realesrgan import RRDBNet
+try:
+    from realesrgan import RRDBNet
+except ImportError:
+    class ResidualDenseBlock(nn.Module):
+        def __init__(self, num_feat=64, num_grow_ch=32):
+            super().__init__()
+            self.conv1 = nn.Conv2d(num_feat, num_grow_ch, 3, 1, 1)
+            self.conv2 = nn.Conv2d(num_feat + num_grow_ch, num_grow_ch, 3, 1, 1)
+            self.conv3 = nn.Conv2d(num_feat + num_grow_ch * 2, num_grow_ch, 3, 1, 1)
+            self.conv4 = nn.Conv2d(num_feat + num_grow_ch * 3, num_grow_ch, 3, 1, 1)
+            self.conv5 = nn.Conv2d(num_feat + num_grow_ch * 4, num_feat, 3, 1, 1)
+            self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+        def forward(self, x):
+            x1 = self.lrelu(self.conv1(x))
+            x2 = self.lrelu(self.conv2(torch.cat((x, x1), 1)))
+            x3 = self.lrelu(self.conv3(torch.cat((x, x1, x2), 1)))
+            x4 = self.lrelu(self.conv4(torch.cat((x, x1, x2, x3), 1)))
+            x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
+            return x5 * 0.2 + x
+
+    class RRDB(nn.Module):
+        def __init__(self, num_feat, num_grow_ch=32):
+            super().__init__()
+            self.rdb1 = ResidualDenseBlock(num_feat, num_grow_ch)
+            self.rdb2 = ResidualDenseBlock(num_feat, num_grow_ch)
+            self.rdb3 = ResidualDenseBlock(num_feat, num_grow_ch)
+
+        def forward(self, x):
+            out = self.rdb1(x)
+            out = self.rdb2(out)
+            out = self.rdb3(out)
+            return out * 0.2 + x
+
+    class RRDBNet(nn.Module):
+        def __init__(
+            self,
+            num_in_ch,
+            num_out_ch,
+            num_feat=64,
+            num_block=23,
+            num_grow_ch=32,
+            scale=4,
+        ):
+            super().__init__()
+            self.scale = scale
+            if scale == 2:
+                num_in_ch = num_in_ch * 4
+            elif scale == 1:
+                num_in_ch = num_in_ch * 16
+
+            self.conv_first = nn.Conv2d(num_in_ch, num_feat, 3, 1, 1)
+            self.body = nn.Sequential(
+                *[RRDB(num_feat, num_grow_ch=num_grow_ch) for _ in range(num_block)]
+            )
+            self.conv_body = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+            self.conv_up1 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+            self.conv_up2 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+            self.conv_hr = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+            self.conv_last = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
+            self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+        def forward(self, x):
+            if self.scale == 2:
+                feat = F.pixel_unshuffle(x, downscale_factor=2)
+            elif self.scale == 1:
+                feat = F.pixel_unshuffle(x, downscale_factor=4)
+            else:
+                feat = x
+
+            feat = self.conv_first(feat)
+            body_feat = self.conv_body(self.body(feat))
+            feat = feat + body_feat
+            feat = self.lrelu(
+                self.conv_up1(F.interpolate(feat, scale_factor=2, mode='nearest'))
+            )
+            feat = self.lrelu(
+                self.conv_up2(F.interpolate(feat, scale_factor=2, mode='nearest'))
+            )
+            out = self.conv_last(self.lrelu(self.conv_hr(feat)))
+            return out
 
 try:
     from onnxsim import simplify  # type: ignore[reportMissingImports]
@@ -456,6 +536,23 @@ def _extract_state_dict(checkpoint):
     return checkpoint
 
 
+def _resolve_checkpoint_path(name_or_path: Path) -> Path:
+    base = Path(name_or_path)
+    repo_root = Path(__file__).resolve().parents[1]
+    candidates = [
+        base,
+        repo_root / base,
+        Path('models') / base.name,
+        repo_root / 'models' / base.name,
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return base
+
+
 class _ClampedModel(nn.Module):
     """Wraps any model and clamps its output to [0, 1].
 
@@ -545,13 +642,13 @@ def _export_static_onnx(model, onnx_output_path, size=512):
         )
 
 
-def _postprocess_onnx_for_web(onnx_output_path):
+def _postprocess_onnx_for_web(onnx_output_path, simplify_graph=True):
     print(f"Applying web-focused optimizations to {onnx_output_path}...")
     model = onnx.load(onnx_output_path)
     model = onnx.shape_inference.infer_shapes(model)
 
     # 1. Graph simplification MUST be processed while tensors match float32 precision
-    if simplify is not None:
+    if simplify_graph and simplify is not None:
         simplified_model, check = simplify(model)
         if check:
             model = simplified_model
@@ -570,6 +667,8 @@ def _postprocess_onnx_for_web(onnx_output_path):
             'Add',                   # Residual/skip connections — values accumulate across blocks
             'Mul',                   # SE-block channel scaling — multiplicative blow-up in FP16
             'Sigmoid',               # Gates in SE blocks — FP16 saturates near boundaries
+            # Keep LeakyRelu as a native op; decomposed Less/Where/Mul graphs have caused JSEP regressions.
+            'LeakyRelu',
         ],
     )
     onnx.checker.check_model(model)
@@ -597,6 +696,7 @@ def convert_realcugan_up2x_to_onnx(
     onnx_output_path: str = None,
     variant: str = 'full',
 ):
+    pth_path = _resolve_checkpoint_path(pth_path)
     print(f"Loading weights from {pth_path}...")
     checkpoint = torch.load(pth_path, map_location=torch.device('cpu'))
     state_dict = _extract_state_dict(checkpoint)
@@ -633,7 +733,9 @@ def _convert_dynamic_model_from_checkpoint(
     state_dict_transform=None,
     strict: bool = True,
     onnx_output_path: str = None,
+    simplify_graph: bool = True,
 ):
+    pth_path = _resolve_checkpoint_path(pth_path)
     if not pth_path.exists():
         print(f"Skipping missing checkpoint: {pth_path}")
         return
@@ -652,7 +754,7 @@ def _convert_dynamic_model_from_checkpoint(
 
     output_path = onnx_output_path or f"{pth_path.stem}.onnx"
     _export_dynamic_onnx(_ClampedModel(export_model), output_path)
-    _postprocess_onnx_for_web(output_path)
+    _postprocess_onnx_for_web(output_path, simplify_graph=simplify_graph)
     print(f"Conversion complete! Generated dynamic model: {output_path}")
 
 
@@ -688,10 +790,14 @@ def convert_realesr_animevideov3_to_onnx(pth_path: Path):
         )
         return base_model, _ScaledOutputModel(base_model, scale_factor=0.5)
 
-    _convert_dynamic_model_from_checkpoint(pth_path, build_models)
+    _convert_dynamic_model_from_checkpoint(_resolve_checkpoint_path(pth_path), build_models)
 
 
-def convert_mangajanai_to_onnx(pth_path: Path):
+def convert_mangajanai_to_onnx(
+    pth_path: Path,
+    onnx_output_path: str = None,
+):
+    pth_path = _resolve_checkpoint_path(pth_path)
     def build_models():
         model = RRDBNet(
             num_in_ch=3,
@@ -707,6 +813,8 @@ def convert_mangajanai_to_onnx(pth_path: Path):
         pth_path,
         build_models,
         state_dict_transform=_remap_old_esrgan_keys,
+        onnx_output_path=onnx_output_path,
+        simplify_graph=False,
     )
 
 
@@ -748,14 +856,25 @@ def convert_realplksr_to_onnx(pth_path: Path):
 if __name__ == "__main__":
     convert_realesrgan_x2plus_to_onnx()
     convert_realesr_animevideov3_to_onnx(Path("realesr-animevideov3.pth"))
-    convert_mangajanai_to_onnx(Path("2x_MangaJaNai_1200p_V1_ESRGAN_70k.pth"))
+    convert_mangajanai_to_onnx(
+        Path("2x_MangaJaNai_1200p_V1_ESRGAN_70k.pth"),
+        onnx_output_path=str(Path("models") / "2x_MangaJaNai_1200p_V1_ESRGAN_70k.onnx"),
+    )
+    convert_mangajanai_to_onnx(
+        Path("2x_MangaJaNai_1600p_V1_ESRGAN_90k.pth"),
+        onnx_output_path=str(Path("models") / "2x_MangaJaNai_1600p_V1_ESRGAN_90k.onnx"),
+    )
+    convert_mangajanai_to_onnx(
+        Path("2x_IllustrationJaNai_V1_ESRGAN_120k.pth"),
+        onnx_output_path=str(Path("models") / "2x_IllustrationJaNai_V1_ESRGAN_120k.onnx"),
+    )
     convert_mosr_gps_to_onnx(Path("2x-AnimeSharpV2_MoSR_Sharp.pth"))
     convert_realplksr_to_onnx(Path("2x-AnimeSharpV2_RPLKSR_Sharp.pth"))
     for cugan_name in [
         "up2x-latest-conservative.pth",
         "up2x-latest-denoise1x.pth",
     ]:
-        cugan_path = Path(cugan_name)
+        cugan_path = _resolve_checkpoint_path(cugan_name)
         if cugan_path.exists():
             # Export both quality path (UNet1+UNet2)
             # and fast path (UNet1 only).

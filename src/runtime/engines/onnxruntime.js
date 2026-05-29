@@ -43,7 +43,7 @@ const ONNX_CACHE_STORE_NAME = 'artifacts';
 const ONNX_TILE_YIELD_MS = 0;
 const ONNX_TILE_YIELD_EVERY_TILES = 4;
 const ONNX_INIT_WARMUP_TILE_EDGE_MAX = 512;
-const ONNX_MODEL_SWITCH_FALLBACK_KEY = 'realesrgan-2xplus';
+const ONNX_MODEL_SWITCH_FALLBACK_KEY = 'realesr-animevideov3';
 let onnxCacheDbPromise = null;
 let activeOnnxModelKey = null;
 
@@ -594,6 +594,8 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
                 warmupHeight: initTileEdge,
                 preferredInputWidth: initTileEdge,
                 preferredInputHeight: initTileEdge,
+                inputChannels: Number(onnxActiveModel.inputChannels || 3),
+                outputChannels: Number(onnxActiveModel.outputChannels || 3),
                 graphCaptureEnabled: false
             }, transferList, normalizedLane);
         }

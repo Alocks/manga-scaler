@@ -9,7 +9,7 @@ const DEFAULT_SIMPLE_PRESET = 'M';
 const DEFAULT_ENGINE_BACKEND = 'webgl';
 const DEFAULT_WEBGPU_MODEL = 'ModeA';
 const DEFAULT_WEBGPU_SCALE = 2;
-const DEFAULT_ONNX_MODEL = 'realesrgan-2xplus';
+const DEFAULT_ONNX_MODEL = 'realesr-animevideov3';
 const SIMPLE_PRESET_VALUES = new Set(['S', 'M', 'L', 'UL', 'VL']);
 const ENGINE_BACKEND_VALUES = new Set(['off', 'webgl', 'webgpu', 'onnx']);
 const WEBGPU_MODEL_VALUES = new Set([
@@ -17,13 +17,14 @@ const WEBGPU_MODEL_VALUES = new Set([
 ]);
 const WEBGPU_SCALE_VALUES = new Set([2, 3, 4]);
 const FALLBACK_ONNX_MODEL_VALUES = new Set([
-    'realesrgan-2xplus',
     'realesr-animevideov3',
     'up2x-latest-conservative',
     'up2x-latest-denoise1x',
+    'animejanai-hd-v3sharp1-compact',
+    'animejanai-hd-v3sharp1-superultracompact',
     'mangajanai-1200p-v1',
-    'animesharp-v2-mosr-sharp',
-    'animesharp-v2-rplksr-sharp'
+    'mangajanai-1600p-v1',
+    'illustrationjanai-v1'
 ]);
 
 let selectedSimplePreset = DEFAULT_SIMPLE_PRESET;

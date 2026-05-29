@@ -8,40 +8,42 @@ const DEFAULT_SIMPLE_PRESET = 'M';
 const DEFAULT_ENGINE_BACKEND = 'webgl';
 const DEFAULT_WEBGPU_MODEL = 'ModeA';
 const DEFAULT_WEBGPU_SCALE = 2;
-const DEFAULT_ONNX_MODEL = 'realesrgan-2xplus';
+const DEFAULT_ONNX_MODEL = 'realesr-animevideov3';
 const WEBGPU_MODEL_VALUES = new Set(['ModeA', 'ModeAA', 'ModeB', 'ModeBB', 'ModeC', 'ModeCA']);
 const FALLBACK_ONNX_MODEL_OPTIONS = [
-  { key: 'realesrgan-2xplus', title: 'RealESRGAN 2x+' },
-  { key: 'realesr-general-x4v3', title: 'RealESR General x4 v3' }
+  { key: 'realesr-animevideov3', title: 'RealESR AnimeVideo v3' },
+  { key: 'up2x-latest-conservative', title: 'RealCUGAN Conservative' },
+  { key: 'up2x-latest-denoise1x', title: 'RealCUGAN 2X Denoise 1x' },
+  { key: 'animejanai-hd-v3sharp1-compact', title: 'AnimeJaNai HD V3 Sharp1 Compact' },
+  { key: 'animejanai-hd-v3sharp1-superultracompact', title: 'AnimeJaNai HD V3 Sharp1 SuperUltraCompact' },
+  { key: 'mangajanai-1200p-v1', title: 'MangaJaNai 2x 1200p V1' },
+  { key: 'mangajanai-1600p-v1', title: 'MangaJaNai 2x 1600p V1' },
+  { key: 'illustrationjanai-v1', title: 'IllustrationJaNai 2x V1' }
 ];
 const ONNX_MODEL_HINTS = {
-  'realesrgan-2xplus': {
-    speed: 'Speed: Slow',
-    quality: 'Quality: High'
-  },
   'realesr-animevideov3': {
-    speed: 'Speed: Very Fast',
-    quality: 'Quality: Medium'
+    runtime: 'Runtime ≈ 1.1 second'
   },
   'up2x-latest-conservative': {
-    speed: 'Speed: Medium',
-    quality: 'Quality: High'
+    runtime: 'Runtime ≈ 2.4 seconds'
   },
   'up2x-latest-denoise1x': {
-    speed: 'Speed: Medium',
-    quality: 'Quality: High'
+    runtime: 'Runtime ≈ 2.5 seconds'
+  },
+  'animejanai-hd-v3sharp1-compact': {
+    runtime: 'Runtime ≈ 2.4 seconds'
+  },
+  'animejanai-hd-v3sharp1-superultracompact': {
+    runtime: 'Runtime ≈ 2.1 seconds'
   },
   'mangajanai-1200p-v1': {
-    speed: 'Speed: Slow',
-    quality: 'Quality: Very High'
+    runtime: 'Runtime ≈ 3.1 seconds'
   },
-  'animesharp-v2-mosr-sharp': {
-    speed: 'Speed: Slow',
-    quality: 'Quality: Medium'
+  'mangajanai-1600p-v1': {
+    runtime: 'Runtime ≈ 2.5 seconds'
   },
-  'animesharp-v2-rplksr-sharp': {
-    speed: 'Speed: Slow',
-    quality: 'Quality: High'
+  'illustrationjanai-v1': {
+    runtime: 'Runtime ≈ 2.5 seconds'
   }
 };
 const CLEAR_CACHE_MESSAGE_TYPE = 'manga-scaler:clear-cache';
@@ -92,8 +94,7 @@ function buildOnnxModelSelectOptions(selectedValue = DEFAULT_ONNX_MODEL) {
   for (const option of options) {
     if (!option?.key) continue;
     const hint = ONNX_MODEL_HINTS[option.key] || {
-      speed: 'Speed: Medium',
-      quality: 'Quality: Medium'
+      runtime: 'Runtime: +-2.5 seconds'
     };
 
     const modelRow = document.createElement('div');
@@ -117,7 +118,7 @@ function buildOnnxModelSelectOptions(selectedValue = DEFAULT_ONNX_MODEL) {
 
     const desc = document.createElement('div');
     desc.className = 'onnx-model-desc';
-    desc.textContent = `${hint.speed} | ${hint.quality}`;
+    desc.textContent = hint.runtime;
 
     modelRow.appendChild(row);
     modelRow.appendChild(desc);
