@@ -99,7 +99,7 @@ function restoreOriginalImage(img) {
     delete img.dataset.aiJobId;
 }
 
-function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
+async function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
     if (!(img instanceof HTMLImageElement)) return null;
     if (!(processedBlob instanceof Blob)) return null;
 
@@ -116,7 +116,57 @@ function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
     img.removeAttribute('srcset');
     img.removeAttribute('sizes');
     img.style.setProperty('image-rendering', '-webkit-optimize-contrast');
+
+    // Pre-decode the blob URL in a hidden image so the browser has it fully
+    // decoded and in cache before we swap. The visible img.src assignment is
+    // then instant — no blank frame between original and upscaled.
+    await new Promise((resolve) => {
+        const preload = new Image();
+        preload.onload = resolve;
+        preload.onerror = resolve;
+        preload.src = objectUrl;
+    });
+
     img.src = objectUrl;
+
+    return objectUrl;
+}
+
+// Synchronous apply path used from the img.src setter hook.
+// When the memory cache already has the processed blob, this injects it
+// directly so the original image URL is never loaded — eliminating the
+// flash of the original image during page navigation.
+function applyCachedBlobFromSrcHook(img, sourceUrl, cachedBlob) {
+    const oldBlobUrl = img.dataset.aiBlobUrl;
+    if (oldBlobUrl) {
+        try { URL.revokeObjectURL(oldBlobUrl); } catch {}
+    }
+
+    // Force-update the original-src reference to the new page URL.
+    img.dataset.aiOriginalSrc = sourceUrl;
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalSrcset')) {
+        img.dataset.aiOriginalSrcset = img.getAttribute('srcset') || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalSizes')) {
+        img.dataset.aiOriginalSizes = img.getAttribute('sizes') || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalImageRendering')) {
+        img.dataset.aiOriginalImageRendering = img.style.getPropertyValue('image-rendering') || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(img.dataset, 'aiOriginalImageRenderingPriority')) {
+        img.dataset.aiOriginalImageRenderingPriority = img.style.getPropertyPriority('image-rendering') || '';
+    }
+
+    const objectUrl = URL.createObjectURL(cachedBlob);
+    img.dataset.aiBlobUrl = objectUrl;
+    img.dataset.aiProcessed = 'true';
+    img.dataset.aiProcessedSrc = sourceUrl;
+    delete img.dataset.aiProcessingSrc;
+    delete img.dataset.aiJobId;
+
+    img.removeAttribute('srcset');
+    img.removeAttribute('sizes');
+    img.style.setProperty('image-rendering', '-webkit-optimize-contrast');
 
     return objectUrl;
 }

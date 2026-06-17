@@ -224,6 +224,24 @@ if (originalImageProto && typeof originalImageProto.set === 'function' && !origi
     const originalSet = originalImageProto.set;
     const wrappedSet = function(value) {
         queueBackgroundIfEligible(value, 'image-src');
+
+        // Fast path: if the processed blob is already in the in-memory cache,
+        // inject it directly so the original image URL is never fetched and
+        // the page-navigation flash is eliminated entirely.
+        if (typeof value === 'string' && value && this instanceof HTMLImageElement) {
+            const cacheKey = typeof getProcessedCacheKey === 'function' ? getProcessedCacheKey(value) : null;
+            if (cacheKey) {
+                const cachedBlob = getProcessedCacheEntry(cacheKey);
+                if (cachedBlob instanceof Blob) {
+                    const objectUrl = applyCachedBlobFromSrcHook(this, value, cachedBlob);
+                    if (objectUrl) {
+                        originalSet.call(this, objectUrl);
+                        return;
+                    }
+                }
+            }
+        }
+
         originalSet.call(this, value);
     };
     wrappedSet[NH_SCALER_HOOK_MARK] = true;
@@ -318,7 +336,7 @@ async function processCurrentImage(container) {
 
     const cachedBlob = await getProcessedCacheBlob(sourceUrl, runtimeSettings);
     if (cachedBlob) {
-        applyProcessedBlobToImage(img, sourceUrl, cachedBlob);
+        await applyProcessedBlobToImage(img, sourceUrl, cachedBlob);
         return;
     }
 
@@ -331,7 +349,7 @@ async function processCurrentImage(container) {
         if (!img.isConnected || getImageSourceUrl(img) !== sourceUrl) return;
         const bgResult = await getProcessedCacheBlob(sourceUrl, runtimeSettings);
         if (bgResult) {
-            applyProcessedBlobToImage(img, sourceUrl, bgResult);
+            await applyProcessedBlobToImage(img, sourceUrl, bgResult);
         }
         return;
     }
@@ -468,7 +486,7 @@ async function processCurrentImage(container) {
             return;
         }
 
-        applyProcessedBlobToImage(img, sourceUrl, processedBlob);
+        await applyProcessedBlobToImage(img, sourceUrl, processedBlob);
     } catch (err) {
         if (shouldSkipSourceAfterError(err)) {
             img.dataset.aiSkipSource = sourceUrl;
