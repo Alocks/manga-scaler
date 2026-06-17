@@ -39,7 +39,6 @@
   "content_scripts": [{
     "matches": ["*://*.nhentai.net/*", "*://nhentai.net/*", "*://*.comix.to/*", "*://comix.to/*", "*://mangadex.org/*", "*://*.mangadex.org/*", "*://mangakakalot.gg/*", "*://*.mangakakalot.gg/*", "*://manganato.gg/*", "*://*.manganato.gg/*"],
     "js": [
-      "./node_modules/onnxruntime-web/dist/ort.all.min.js",
       "./node_modules/anime4k-webgpu/lib/index.js",
       "./node_modules/anime4k-webgl/anime4k.js",
       "content.js",

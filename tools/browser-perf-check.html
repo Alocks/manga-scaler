@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NH Scaler ONNX Browser Perf Check</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; margin: 20px; color: #111; }
+    h1 { margin: 0 0 12px; }
+    #status { margin: 10px 0 16px; }
+    table { border-collapse: collapse; width: 100%; max-width: 960px; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; }
+    th { background: #f6f6f6; }
+    .mono { font-family: Consolas, monospace; }
+    .ok { color: #0a7a2f; }
+    .warn { color: #9a6a00; }
+    .err { color: #b00020; }
+  </style>
+  <script src="/node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
+</head>
+<body>
+  <h1>ONNX Browser Performance Check</h1>
+  <div id="status" class="mono">Preparing...</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Model</th>
+        <th>Provider</th>
+        <th>Init (ms)</th>
+        <th>Run 1 (ms)</th>
+        <th>Avg 5 Runs (ms)</th>
+        <th>Output Shape</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+
+    const MODELS = [
+      'models/2x_MangaJaNai_1200p_V1_ESRGAN_70k.onnx',
+      'models/2x_MangaJaNai_1600p_V1_ESRGAN_90k.onnx',
+      'models/2x_IllustrationJaNai_V1_ESRGAN_120k.onnx'
+    ];
+
+    function addRow(cells) {
+      const tr = document.createElement('tr');
+      for (const cell of cells) {
+        const td = document.createElement('td');
+        td.textContent = String(cell);
+        tr.appendChild(td);
+      }
+      resultsEl.appendChild(tr);
+    }
+
+    async function loadModelBytes(modelPath) {
+      const res = await fetch('/' + modelPath);
+      if (!res.ok) throw new Error('Failed to fetch model: ' + modelPath + ' status=' + res.status);
+      const buf = await res.arrayBuffer();
+      return new Uint8Array(buf);
+    }
+
+    function chooseProvider() {
+      if (navigator.gpu) {
+        return [{ name: 'webgpu', preferredLayout: 'NHWC', powerPreference: 'high-performance' }];
+      }
+      return ['wasm'];
+    }
+
+    async function benchModel(modelPath) {
+      const provider = chooseProvider();
+      const providerName = Array.isArray(provider) && typeof provider[0] === 'object'
+        ? provider[0].name
+        : String(provider[0]);
+
+      const bytes = await loadModelBytes(modelPath);
+
+      const initStart = performance.now();
+      const session = await ort.InferenceSession.create(bytes, {
+        executionProviders: provider,
+        graphOptimizationLevel: 'all',
+        enableCpuMemArena: false,
+        enableMemPattern: false
+      });
+      const initMs = performance.now() - initStart;
+
+      const inputName = session.inputNames[0];
+      const outputName = session.outputNames[0];
+      const width = 256;
+      const height = 256;
+      const input = new ort.Tensor('float32', new Float32Array(width * height * 3), [1, 3, height, width]);
+
+      // Warmup
+      await session.run({ [inputName]: input });
+
+      const runs = [];
+      for (let i = 0; i < 5; i++) {
+        const t0 = performance.now();
+        const out = await session.run({ [inputName]: input });
+        const t1 = performance.now();
+        runs.push(t1 - t0);
+        const tensor = out[outputName];
+        if (tensor && typeof tensor.dispose === 'function') {
+          tensor.dispose();
+        }
+      }
+
+      const run1 = runs[0];
+      const avg = runs.reduce((a, b) => a + b, 0) / runs.length;
+
+      const outMeta = session.outputMetadata && session.outputMetadata[outputName];
+      const dims = outMeta && Array.isArray(outMeta.dimensions)
+        ? outMeta.dimensions.join('x')
+        : 'unknown';
+
+      return {
+        modelPath,
+        providerName,
+        initMs,
+        run1,
+        avg,
+        dims
+      };
+    }
+
+    async function main() {
+      try {
+        ort.env.wasm.wasmPaths = {
+          mjs: '/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs',
+          wasm: '/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm'
+        };
+      } catch (_err) {
+        // Keep defaults if this build does not expose wasm path config.
+      }
+
+      statusEl.textContent = 'Running benchmarks...';
+      statusEl.className = 'mono';
+
+      for (const modelPath of MODELS) {
+        try {
+          const result = await benchModel(modelPath);
+          addRow([
+            result.modelPath,
+            result.providerName,
+            result.initMs.toFixed(2),
+            result.run1.toFixed(2),
+            result.avg.toFixed(2),
+            result.dims
+          ]);
+        } catch (err) {
+          addRow([modelPath, 'error', '-', '-', '-', String(err)]);
+        }
+      }
+
+      statusEl.textContent = 'Complete';
+      statusEl.className = 'mono ok';
+    }
+
+    main();
+  </script>
+</body>
+</html>

@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NH Scaler ONNX Queue Bench</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; margin: 20px; color: #111; }
+    h1 { margin: 0 0 12px; }
+    #status { margin: 10px 0 16px; font-family: Consolas, monospace; white-space: pre-wrap; }
+    table { border-collapse: collapse; width: 100%; max-width: 1400px; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; }
+    th { background: #f6f6f6; }
+    #preview { margin-top: 20px; max-width: 1400px; }
+    .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .preview-card { border: 1px solid #ccc; border-radius: 8px; padding: 10px; background: #fafafa; }
+    .preview-card h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+    .preview-viewport { overflow: auto; max-height: 70vh; background: #fff; border: 1px solid #ddd; border-radius: 6px; }
+    .preview-card img { display: block; width: 300%; height: auto; max-width: none; background: #fff; }
+    #previewMeta { margin: 8px 0 0; font-family: Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+    .ok { color: #0a7a2f; }
+    .warn { color: #aa6d00; }
+    .err { color: #b00020; }
+  </style>
+  <script>
+    if (!globalThis.chrome) globalThis.chrome = {};
+    if (!globalThis.chrome.runtime) globalThis.chrome.runtime = {};
+    if (typeof globalThis.chrome.runtime.getURL !== 'function') {
+      globalThis.chrome.runtime.getURL = (p) => new URL('/' + String(p || '').replace(/^\/+/, ''), location.href).toString();
+    }
+
+    if (!globalThis.chrome.storage) globalThis.chrome.storage = {};
+    if (!globalThis.chrome.storage.sync) {
+      globalThis.chrome.storage.sync = {
+        get(defaults, callback) {
+          setTimeout(() => {
+            if (typeof callback === 'function') {
+              callback(defaults || {});
+            }
+          }, 0);
+        },
+        set(_values, callback) {
+          setTimeout(() => {
+            if (typeof callback === 'function') {
+              callback();
+            }
+          }, 0);
+        }
+      };
+    }
+
+    if (!globalThis.chrome.storage.onChanged) {
+      globalThis.chrome.storage.onChanged = { addListener() {} };
+    }
+
+    globalThis.MangaScalerDebugEnabled = false;
+    globalThis.MangaScalerProfiling = {
+      isEnabled: () => true,
+      isOnnxEnabled: () => true
+    };
+  </script>
+  <script src="/node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
+  <script src="/src/runtime/runtime.bundle.js"></script>
+</head>
+<body>
+  <h1>ONNX Runtime Queue/Orchestrator Bench</h1>
+  <div id="status">Preparing runtime bench...</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Model Key</th>
+        <th>Image</th>
+        <th>Dims</th>
+        <th>Queue Run (ms)</th>
+        <th>Provider/Mode</th>
+        <th>Reduction vs Baseline</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <section id="preview">
+    <h2>Final Image Preview</h2>
+    <div class="preview-grid">
+      <article class="preview-card">
+        <h3>Original (last image)</h3>
+        <div class="preview-viewport">
+          <img id="previewOriginal" alt="Original input image" />
+        </div>
+      </article>
+      <article class="preview-card">
+        <h3>Processed (candidate model)</h3>
+        <div class="preview-viewport">
+          <img id="previewProcessed" alt="Processed output image" />
+        </div>
+      </article>
+    </div>
+    <p id="previewMeta">Preparing preview...</p>
+  </section>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+    const previewOriginalEl = document.getElementById('previewOriginal');
+    const previewProcessedEl = document.getElementById('previewProcessed');
+    const previewMetaEl = document.getElementById('previewMeta');
+
+    const params = new URLSearchParams(location.search);
+    const imageStart = Number(params.get('start') || 6);
+    const imageEnd = Number(params.get('end') || 9);
+    const imageQueue = Array.from({ length: Math.max(0, imageEnd - imageStart + 1) }, (_, i) => `${imageStart + i}.jpg`);
+
+    const baselineModel = String(params.get('baseline') || 'mangajanai-1200p-v1');
+    const candidateModel = String(params.get('candidate') || 'mangajanai-1200p-v1-bench');
+    const targetReductionPercent = Number(params.get('target') || 20);
+    const baselineHash = String(params.get('baselineHash') || '0B46C21623B467C58F5FD16FB68A78774F81594CE8B3CB1FA403100CFDBB933D');
+    const candidateHash = String(params.get('candidateHash') || 'unknown-candidate-hash');
+    const maxModelRunMs = Math.max(1000, Number(params.get('maxModelRunMs') || 20000));
+    const maxTotalRunMs = Math.max(1000, Number(params.get('maxTotalRunMs') || 20000));
+    const forceFreshProcess = params.get('forceFreshProcess') !== '0';
+    const resetWorkersPerPhase = params.get('resetWorkers') === '1';
+    const disableCache = params.get('cache') === 'off';
+    const baselineCacheKey = `nhs:bench:baseline:${baselineModel}:${imageStart}-${imageEnd}:${baselineHash}`;
+    const candidateCacheKey = `nhs:bench:candidate:${candidateModel}:${imageStart}-${imageEnd}:${baselineHash}:${candidateHash}`;
+    let processedPreviewObjectUrl = null;
+
+    const eventRows = [];
+    window.__benchEventRows = eventRows;
+    const originalMangaScalerLog = window.MangaScalerLog;
+    window.MangaScalerLog = (label, data = {}) => {
+      eventRows.push({ ts: performance.now(), label: String(label || ''), data: data || {} });
+      if (typeof originalMangaScalerLog === 'function') {
+        try { originalMangaScalerLog(label, data); } catch (_) {}
+      }
+    };
+
+    function addRow(cells) {
+      const tr = document.createElement('tr');
+      for (const cell of cells) {
+        const td = document.createElement('td');
+        td.textContent = String(cell);
+        tr.appendChild(td);
+      }
+      resultsEl.appendChild(tr);
+    }
+
+    function parseDurationMs(raw) {
+      const text = String(raw || '').trim().toLowerCase();
+      if (!text) return null;
+      const parsed = Number.parseFloat(text.replace('ms', ''));
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function installBenchSourceAdapter() {
+      if (!Array.isArray(window.NHScalerSourceAdapters)) {
+        window.NHScalerSourceAdapters = [];
+      }
+
+      const adapter = {
+        id: 'bench-local-images',
+        isReaderPageUrl(url) {
+          try {
+            const u = new URL(url, location.href);
+            return u.pathname.includes('/tools/browser-perf-image-check_bench_queue.html');
+          } catch {
+            return false;
+          }
+        },
+        parseImageUrl(url) {
+          try {
+            const u = new URL(url, location.href);
+            const match = u.pathname.match(/\/model_converter\/images_test\/(\d+)\.jpg$/i);
+            if (!match) return null;
+            const page = Number(match[1]);
+            if (!Number.isFinite(page)) return null;
+            return {
+              page,
+              pageKey: `bench-page-${page}`
+            };
+          } catch {
+            return null;
+          }
+        },
+        getActiveContainer() {
+          return null;
+        },
+        selectForegroundImage() {
+          return null;
+        },
+        getImageLoadCandidates(sourceUrl) {
+          return [sourceUrl];
+        }
+      };
+
+      const existingIndex = window.NHScalerSourceAdapters.findIndex((a) => a && a.id === adapter.id);
+      if (existingIndex >= 0) {
+        window.NHScalerSourceAdapters[existingIndex] = adapter;
+      } else {
+        window.NHScalerSourceAdapters.push(adapter);
+      }
+    }
+
+    async function loadImageDimensions(url) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = url;
+      await img.decode();
+      return `${img.naturalWidth || img.width}x${img.naturalHeight || img.height}`;
+    }
+
+    async function setOnnxModelPreference(modelKey) {
+      if (typeof window.applyRuntimePreferenceStorageChanges !== 'function') {
+        throw new Error('applyRuntimePreferenceStorageChanges is unavailable');
+      }
+
+      window.applyRuntimePreferenceStorageChanges({
+        engineBackend: { newValue: 'onnx' },
+        onnxModel: { newValue: modelKey }
+      });
+    }
+
+    async function resetRuntimeStateForBench() {
+      if (resetWorkersPerPhase) {
+        if (typeof window.resetOnnxWorkerState === 'function') {
+          window.resetOnnxWorkerState('foreground');
+          window.resetOnnxWorkerState('background');
+        }
+
+        if (typeof window.resetOnnxBackgroundWorkerLanes === 'function') {
+          window.resetOnnxBackgroundWorkerLanes(1);
+        }
+      }
+
+      if (typeof window.resetBackgroundQueueState === 'function') {
+        window.resetBackgroundQueueState();
+      }
+
+      // Force fresh inference timings by clearing processed-image cache between phases,
+      // while keeping ONNX workers/sessions warm unless resetWorkers=1 is explicitly requested.
+      if (forceFreshProcess && typeof window.clearProcessedCache === 'function') {
+        await window.clearProcessedCache();
+      }
+    }
+
+    function loadBaselineCache() {
+      if (disableCache) return null;
+      try {
+        const raw = localStorage.getItem(baselineCacheKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.baselineHash !== baselineHash) return null;
+        if (!Array.isArray(parsed.rows) || parsed.rows.length !== imageQueue.length) return null;
+        return parsed;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveBaselineCache(rows, avgMs) {
+      if (disableCache) return;
+      try {
+        localStorage.setItem(baselineCacheKey, JSON.stringify({
+          baselineModel,
+          baselineHash,
+          imageQueue,
+          avgMs,
+          rows,
+          savedAt: Date.now()
+        }));
+      } catch (_) {
+        // Ignore cache write failures in private mode/quota conditions.
+      }
+    }
+
+    function loadCandidateCache() {
+      if (disableCache) return null;
+      try {
+        const raw = localStorage.getItem(candidateCacheKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.candidateHash !== candidateHash) return null;
+        if (!Array.isArray(parsed.rows) || parsed.rows.length !== imageQueue.length) return null;
+        return parsed;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveCandidateCache(rows, avgMs, reductionPct) {
+      if (disableCache) return;
+      try {
+        localStorage.setItem(candidateCacheKey, JSON.stringify({
+          baselineModel,
+          candidateModel,
+          baselineHash,
+          candidateHash,
+          imageQueue,
+          avgMs,
+          reductionPct,
+          rows,
+          savedAt: Date.now()
+        }));
+      } catch (_) {
+        // Ignore cache write failures in private mode/quota conditions.
+      }
+    }
+
+    function getQueueBenchRowsSince(tsStart) {
+      return eventRows
+        .filter((e) => e.ts >= tsStart && (e.label === 'bg-process:upscale-time' || e.label === 'bg-process:skip-cached'))
+        .map((e) => {
+          const sourceUrl = String(e.data?.sourceUrl || '');
+          const isCacheHit = e.label === 'bg-process:skip-cached';
+          const durationMs = isCacheHit ? 0 : parseDurationMs(e.data?.duration);
+          const runMode = isCacheHit
+            ? String(e.data?.cache || 'cache-hit')
+            : String(e.data?.runMode || e.data?.backend || 'unknown');
+          return { sourceUrl, durationMs, runMode };
+        })
+        .filter((row) => !!row.sourceUrl && Number.isFinite(row.durationMs));
+    }
+
+    function getQueueErrorsSince(tsStart) {
+      return eventRows
+        .filter((e) => e.ts >= tsStart && e.label === 'bg-process:error')
+        .map((e) => ({
+          sourceUrl: String(e.data?.sourceUrl || ''),
+          error: String(e.data?.error || 'Unknown queue error')
+        }))
+        .filter((row) => !!row.sourceUrl);
+    }
+
+    async function waitForQueueTimings(runUrls, tsStart, pollTimeoutMs = maxModelRunMs) {
+      const expected = new Set(runUrls);
+      const deadline = performance.now() + pollTimeoutMs;
+
+      while (performance.now() < deadline) {
+        const rows = getQueueBenchRowsSince(tsStart);
+        const seen = new Set(rows.map((row) => row.sourceUrl));
+        const errors = getQueueErrorsSince(tsStart);
+
+        if (forceFreshProcess) {
+          const cachedHit = rows.find((row) => row.runMode === 'persistent' || row.runMode === 'cache-hit');
+          if (cachedHit) {
+            throw new Error(`Unexpected cache hit during fresh run: ${cachedHit.sourceUrl}`);
+          }
+        }
+
+        for (const err of errors) {
+          if (expected.has(err.sourceUrl)) {
+            throw new Error(`Queue failed for ${err.sourceUrl}: ${err.error}`);
+          }
+        }
+
+        let complete = true;
+        for (const url of expected) {
+          if (!seen.has(url)) {
+            complete = false;
+            break;
+          }
+        }
+
+        if (complete) {
+          return { rows, missing: [], timedOut: false };
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      const rows = getQueueBenchRowsSince(tsStart);
+      const seen = new Set(rows.map((row) => row.sourceUrl));
+      const missing = runUrls.filter((url) => !seen.has(url));
+      return { rows, missing, timedOut: true };
+    }
+
+    async function runQueueOnceForModel(modelKey, urls, dimsByUrl) {
+      await setOnnxModelPreference(modelKey);
+      await resetRuntimeStateForBench();
+
+      // Keep queue URLs stable for deterministic row mapping and source matching.
+      const runUrls = urls.slice();
+
+      const startTs = performance.now();
+
+      if (typeof window.processBackgroundQueue !== 'function') {
+        throw new Error('processBackgroundQueue is unavailable');
+      }
+
+      let rows = [];
+      let pendingUrls = [...runUrls];
+      const maxQueuePasses = 2;
+
+      for (let pass = 1; pass <= maxQueuePasses && pendingUrls.length > 0; pass++) {
+        for (const url of pendingUrls) {
+          if (typeof window.preprocessBackgroundImage === 'function') {
+            await window.preprocessBackgroundImage(url);
+            continue;
+          }
+
+          const ok = typeof window.queueBackgroundIfEligible === 'function'
+            ? window.queueBackgroundIfEligible(url, 'bench')
+            : false;
+          if (!ok) {
+            throw new Error(`queueBackgroundIfEligible rejected ${url}`);
+          }
+        }
+
+        window.processBackgroundQueue();
+        const timingState = await waitForQueueTimings(runUrls, startTs, maxModelRunMs);
+        rows = timingState.rows;
+        pendingUrls = timingState.missing;
+
+        if (timingState.timedOut) {
+          break;
+        }
+      }
+
+      if (pendingUrls.length > 0) {
+        throw new Error(`Timed out after ${maxModelRunMs}ms waiting for ${pendingUrls[0]}`);
+      }
+
+      const byUrl = new Map();
+      for (const row of rows) {
+        byUrl.set(row.sourceUrl, row);
+      }
+
+      const normalized = [];
+      for (const url of runUrls) {
+        const hit = byUrl.get(url);
+        if (!hit) {
+          throw new Error(`No queue timing captured for ${url}`);
+        }
+
+        const base = new URL(url, location.href);
+        base.search = '';
+        const baseUrl = base.toString();
+
+        normalized.push({
+          modelKey,
+          imageUrl: baseUrl,
+          imageName: base.pathname.split('/').pop() || baseUrl,
+          dims: dimsByUrl.get(baseUrl) || 'unknown',
+          runMs: hit.durationMs,
+          runMode: hit.runMode
+        });
+      }
+
+      return normalized;
+    }
+
+    function setPreviewMeta(text) {
+      if (!previewMetaEl) return;
+      previewMetaEl.textContent = text;
+    }
+
+    async function renderFinalPreview(finalImageUrl) {
+      if (!finalImageUrl) {
+        setPreviewMeta('Preview unavailable: no final image URL.');
+        return;
+      }
+
+      if (previewOriginalEl) {
+        previewOriginalEl.src = finalImageUrl;
+      }
+
+      if (processedPreviewObjectUrl) {
+        URL.revokeObjectURL(processedPreviewObjectUrl);
+        processedPreviewObjectUrl = null;
+      }
+
+      try {
+        await setOnnxModelPreference(candidateModel);
+
+        let blob = null;
+        if (typeof window.getProcessedCacheBlob === 'function') {
+          const settings = typeof window.getRuntimePreferenceSnapshot === 'function'
+            ? window.getRuntimePreferenceSnapshot()
+            : undefined;
+          blob = await window.getProcessedCacheBlob(finalImageUrl, settings);
+        }
+
+        if (!blob && typeof window.preprocessBackgroundImage === 'function' && typeof window.processBackgroundQueue === 'function') {
+          await window.preprocessBackgroundImage(finalImageUrl);
+          await window.processBackgroundQueue();
+
+          if (typeof window.getProcessedCacheBlob === 'function') {
+            const settings = typeof window.getRuntimePreferenceSnapshot === 'function'
+              ? window.getRuntimePreferenceSnapshot()
+              : undefined;
+            blob = await window.getProcessedCacheBlob(finalImageUrl, settings);
+          }
+        }
+
+        if (!(blob instanceof Blob)) {
+          setPreviewMeta(`Preview unavailable for ${finalImageUrl} (no processed blob found).`);
+          return;
+        }
+
+        processedPreviewObjectUrl = URL.createObjectURL(blob);
+        if (previewProcessedEl) {
+          previewProcessedEl.src = processedPreviewObjectUrl;
+        }
+
+        setPreviewMeta(
+          `Final image: ${finalImageUrl}\n` +
+          `Processed blob size: ${blob.size} bytes\n` +
+          `Model: ${candidateModel}`
+        );
+      } catch (err) {
+        setPreviewMeta(`Preview failed for ${finalImageUrl}: ${String(err)}`);
+      }
+    }
+
+    function averageMs(rows) {
+      if (!Array.isArray(rows) || rows.length === 0) return null;
+      const sum = rows.reduce((acc, row) => acc + (Number(row.runMs) || 0), 0);
+      return sum / rows.length;
+    }
+
+    async function main() {
+      const benchStart = performance.now();
+      const assertWithinTotalBudget = (phase) => {
+        const elapsed = performance.now() - benchStart;
+        if (elapsed > maxTotalRunMs) {
+          throw new Error(`Benchmark exceeded total budget (${Math.round(elapsed)}ms > ${maxTotalRunMs}ms) at ${phase}`);
+        }
+      };
+
+      if (typeof window.isForegroundTab === 'function') {
+        window.isForegroundTab = () => true;
+      }
+
+      installBenchSourceAdapter();
+
+      const urls = imageQueue.map((name) => new URL(`/model_converter/images_test/${name}`, location.href).toString());
+      const dimsByUrl = new Map();
+      for (const url of urls) {
+        assertWithinTotalBudget('image-dimensions');
+        dimsByUrl.set(url, await loadImageDimensions(url));
+      }
+
+      let baselineRows;
+      let baselineAvg;
+      const cachedBaseline = loadBaselineCache();
+
+      if (cachedBaseline) {
+        baselineRows = cachedBaseline.rows;
+        baselineAvg = Number(cachedBaseline.avgMs);
+        statusEl.textContent = `Using cached baseline (${baselineModel}) for hash ${baselineHash.slice(0, 12)}...`;
+      } else {
+        assertWithinTotalBudget('baseline-start');
+        statusEl.textContent = `Running baseline once via runtime queue: ${baselineModel}`;
+        baselineRows = await runQueueOnceForModel(baselineModel, urls, dimsByUrl);
+        baselineAvg = averageMs(baselineRows);
+        saveBaselineCache(baselineRows, baselineAvg);
+      }
+
+      for (const row of baselineRows) {
+        addRow([
+          row.modelKey,
+          row.imageName,
+          row.dims,
+          row.runMs.toFixed(2),
+          row.runMode,
+          'baseline'
+        ]);
+      }
+
+      statusEl.textContent = `Testing candidate ${candidateModel} vs baseline ${baselineModel}`;
+
+      let candidateRows;
+      let candidateAvg;
+      let reductionPct;
+      const cachedCandidate = loadCandidateCache();
+
+      if (cachedCandidate) {
+        candidateRows = cachedCandidate.rows;
+        candidateAvg = Number(cachedCandidate.avgMs);
+        reductionPct = Number(cachedCandidate.reductionPct);
+      } else {
+        assertWithinTotalBudget('candidate-start');
+        try {
+          candidateRows = await runQueueOnceForModel(candidateModel, urls, dimsByUrl);
+        } catch (err) {
+          addRow([candidateModel, '(all queued files)', '-', '-', 'error', String(err)]);
+          throw err;
+        }
+
+        candidateAvg = averageMs(candidateRows);
+        reductionPct = baselineAvg && candidateAvg
+          ? ((baselineAvg - candidateAvg) / baselineAvg) * 100
+          : null;
+        saveCandidateCache(candidateRows, candidateAvg, reductionPct);
+      }
+
+      for (const row of candidateRows) {
+        addRow([
+          row.modelKey,
+          row.imageName,
+          row.dims,
+          row.runMs.toFixed(2),
+          row.runMode,
+          reductionPct == null ? '-' : `${reductionPct.toFixed(2)}%`
+        ]);
+      }
+
+      const finalRow = candidateRows[candidateRows.length - 1] || baselineRows[baselineRows.length - 1] || null;
+      await renderFinalPreview(finalRow?.imageUrl || '');
+
+      if (reductionPct != null && reductionPct >= targetReductionPercent) {
+        statusEl.textContent = `Complete: ${candidateModel} is ${reductionPct.toFixed(2)}% faster than ${baselineModel}`;
+        statusEl.className = 'ok';
+      } else {
+        statusEl.textContent = `Complete: ${candidateModel} reduction is ${reductionPct == null ? 'n/a' : `${reductionPct.toFixed(2)}%`} (target ${targetReductionPercent.toFixed(1)}%)`;
+        statusEl.className = 'warn';
+      }
+    }
+
+    main().catch((err) => {
+      statusEl.textContent = `Failed: ${String(err)}`;
+      statusEl.className = 'err';
+    });
+  </script>
+</body>
+</html>

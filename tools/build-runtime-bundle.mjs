@@ -30,6 +30,9 @@ const runtimeSourceGroups = Object.freeze({
     'src/runtime/engines/webgl.js',
     'src/runtime/engines/webgpu.js'
   ],
+  workers: [
+    'src/workers/onnxruntime.worker.js'
+  ],
   pipeline: [
     'src/runtime/core/engine.js',
     'src/runtime/core/dom.js',
@@ -46,9 +49,9 @@ const outputFile = 'src/runtime/runtime.bundle.js';
 const shouldCheck = process.argv.includes('--check');
 
 async function listRuntimeSourceFilesOnDisk() {
-  const runtimeRoot = resolve(repoRoot, 'src/runtime');
+  const sourceRoots = ['src/runtime', 'src/workers'];
 
-  async function collectJsFiles(absoluteDir, relativeDir = 'src/runtime') {
+  async function collectJsFiles(absoluteDir, relativeDir) {
     const entries = await readdir(absoluteDir, { withFileTypes: true });
     const files = [];
 
@@ -72,7 +75,12 @@ async function listRuntimeSourceFilesOnDisk() {
     return files;
   }
 
-  const discoveredFiles = await collectJsFiles(runtimeRoot);
+  const discoveredFiles = [];
+  for (const sourceRoot of sourceRoots) {
+    const absoluteRoot = resolve(repoRoot, sourceRoot);
+    const rootFiles = await collectJsFiles(absoluteRoot, sourceRoot);
+    discoveredFiles.push(...rootFiles);
+  }
   return new Set(discoveredFiles);
 }
 

@@ -20,8 +20,6 @@ const FALLBACK_ONNX_MODEL_VALUES = new Set([
     'realesr-animevideov3',
     'up2x-latest-conservative',
     'up2x-latest-denoise1x',
-    'animejanai-hd-v3sharp1-compact',
-    'animejanai-hd-v3sharp1-superultracompact',
     'mangajanai-1200p-v1',
     'mangajanai-1600p-v1',
     'illustrationjanai-v1'

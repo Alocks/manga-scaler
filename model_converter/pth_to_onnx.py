@@ -4,6 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import onnx
 import onnxruntime as ort  # Used for direct runtime optimization
+import numpy as np
+import re
+import tempfile
 from pathlib import Path
 from onnxconverter_common import float16  # type: ignore[reportMissingImports]
 try:
@@ -643,6 +646,155 @@ def _export_static_onnx(model, onnx_output_path, size=512):
 
 
 def _postprocess_onnx_for_web(onnx_output_path, simplify_graph=True):
+    def _build_sanity_input(input_meta):
+        shape = []
+        for axis, dim in enumerate(input_meta.shape):
+            if isinstance(dim, int) and dim > 0:
+                shape.append(dim)
+            else:
+                # Use practical defaults for dynamic axes: NCHW -> 1x3x64x64.
+                if axis == 0:
+                    shape.append(1)
+                elif axis == 1:
+                    shape.append(3)
+                else:
+                    shape.append(64)
+
+        np_dtype = np.float32
+        if input_meta.type == 'tensor(float16)':
+            np_dtype = np.float16
+        elif input_meta.type == 'tensor(float64)':
+            np_dtype = np.float64
+
+        return np.random.default_rng(0).random(shape, dtype=np_dtype)
+
+    def _extract_failing_node_name(error_text):
+        if not error_text:
+            return None
+        match = re.search(r"Name:'([^']+)'", error_text)
+        if match:
+            return match.group(1)
+        alt = re.search(r"while running ([^\s]+) node", error_text)
+        return alt.group(1) if alt else None
+
+    def _describe_failing_operator(model, node_name):
+        if not node_name:
+            return None
+        for node in model.graph.node:
+            if node.name == node_name:
+                return {
+                    'name': node.name,
+                    'op_type': node.op_type,
+                    'inputs': list(node.input),
+                    'outputs': list(node.output),
+                }
+        return None
+
+    def _validate_model_runtime(model, stage_label):
+        with tempfile.NamedTemporaryFile(suffix='.onnx', delete=False) as temp_file:
+            temp_path = temp_file.name
+        try:
+            onnx.save(model, temp_path)
+            runtime_options = ort.SessionOptions()
+            # Disable ORT graph rewrites for sanity checks so we validate the model graph itself,
+            # not provider-specific transformed graphs (e.g. NCHWc reorder nodes).
+            runtime_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+            session = ort.InferenceSession(
+                temp_path,
+                runtime_options,
+                providers=['CPUExecutionProvider']
+            )
+            input_meta = session.get_inputs()[0]
+            sample = _build_sanity_input(input_meta)
+            _ = session.run(None, {input_meta.name: sample})
+            print(f"{stage_label}: runtime sanity check passed.")
+            return True
+        except Exception as runtime_error:
+            error_text = str(runtime_error)
+            failing_node_name = _extract_failing_node_name(error_text)
+            failing_node = _describe_failing_operator(model, failing_node_name)
+            print(f"{stage_label}: runtime sanity check failed: {error_text}")
+            if failing_node:
+                print(
+                    "Failing operator details: "
+                    f"name={failing_node['name']}, "
+                    f"op_type={failing_node['op_type']}, "
+                    f"inputs={failing_node['inputs']}, "
+                    f"outputs={failing_node['outputs']}"
+                )
+            raise
+        finally:
+            try:
+                Path(temp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    def _collect_tensor_shape_map(model):
+        shape_map = {}
+
+        def _record(value_info):
+            tensor_type = value_info.type.tensor_type
+            if not tensor_type.HasField('shape'):
+                return
+            dims = []
+            for dim in tensor_type.shape.dim:
+                if dim.HasField('dim_value') and dim.dim_value > 0:
+                    dims.append(int(dim.dim_value))
+                else:
+                    dims.append(None)
+            shape_map[value_info.name] = dims
+
+        for value in model.graph.input:
+            _record(value)
+        for value in model.graph.value_info:
+            _record(value)
+        for value in model.graph.output:
+            _record(value)
+
+        return shape_map
+
+    def _find_simplify_conv_channel_mismatches(model):
+        shape_map = _collect_tensor_shape_map(model)
+        initializer_shapes = {
+            initializer.name: list(initializer.dims)
+            for initializer in model.graph.initializer
+        }
+
+        mismatches = []
+        for node in model.graph.node:
+            if node.op_type != 'Conv' or len(node.input) < 2:
+                continue
+
+            input_shape = shape_map.get(node.input[0])
+            weight_shape = initializer_shapes.get(node.input[1]) or shape_map.get(node.input[1])
+            if not input_shape or not weight_shape or len(input_shape) < 2 or len(weight_shape) < 2:
+                continue
+
+            input_channels = input_shape[1]
+            kernel_channels = weight_shape[1]
+            group = 1
+            for attr in node.attribute:
+                if attr.name == 'group':
+                    group = int(attr.i or 1)
+                    break
+
+            if (
+                isinstance(input_channels, int)
+                and isinstance(kernel_channels, int)
+                and input_channels != kernel_channels * group
+            ):
+                mismatches.append({
+                    'name': node.name,
+                    'op_type': node.op_type,
+                    'input_channels': input_channels,
+                    'kernel_channels': kernel_channels,
+                    'group': group,
+                    'input_tensor': node.input[0],
+                    'weight_tensor': node.input[1],
+                })
+
+        return mismatches
+
     print(f"Applying web-focused optimizations to {onnx_output_path}...")
     model = onnx.load(onnx_output_path)
     model = onnx.shape_inference.infer_shapes(model)
@@ -651,26 +803,73 @@ def _postprocess_onnx_for_web(onnx_output_path, simplify_graph=True):
     if simplify_graph and simplify is not None:
         simplified_model, check = simplify(model)
         if check:
-            model = simplified_model
+            simplified_model = onnx.shape_inference.infer_shapes(simplified_model)
+            channel_mismatches = _find_simplify_conv_channel_mismatches(simplified_model)
+
+            if channel_mismatches:
+                for mismatch in channel_mismatches[:3]:
+                    print(
+                        "onnxsim: detected Conv channel mismatch after simplify; "
+                        "falling back to unsimplified graph. "
+                        f"name={mismatch['name']}, "
+                        f"input_channels={mismatch['input_channels']}, "
+                        f"kernel_channels={mismatch['kernel_channels']}, "
+                        f"group={mismatch['group']}, "
+                        f"input_tensor={mismatch['input_tensor']}, "
+                        f"weight_tensor={mismatch['weight_tensor']}"
+                    )
+            else:
+                try:
+                    _validate_model_runtime(simplified_model, 'onnxsim')
+                    model = simplified_model
+                except Exception:
+                    print("onnxsim: runtime sanity check failed; keeping unsimplified graph.")
         else:
             print("ONNX simplifier check failed; maintaining fallback structure.")
     else:
         print("onnxsim module unavailable; skipping simplification pass.")
     
     # 2. Safely downcast the model logic to FP16 while preserving outermost IO signatures
-    model = float16.convert_float_to_float16(
-        model,
-        keep_io_types=True,          # Essential for continuous compatibility with JS Float32Arrays
-        disable_shape_infer=False,
-        op_block_list=[
-            'Resize', 'Upsample',    # Upsampling — precision-sensitive interpolation
-            'Add',                   # Residual/skip connections — values accumulate across blocks
-            'Mul',                   # SE-block channel scaling — multiplicative blow-up in FP16
-            'Sigmoid',               # Gates in SE blocks — FP16 saturates near boundaries
-            # Keep LeakyRelu as a native op; decomposed Less/Where/Mul graphs have caused JSEP regressions.
-            'LeakyRelu',
-        ],
-    )
+    try:
+        model = float16.convert_float_to_float16(
+            model,
+            keep_io_types=True,          # Essential for continuous compatibility with JS Float32Arrays
+            disable_shape_infer=False,
+            op_block_list=[
+                'Resize', 'Upsample',    # Upsampling — precision-sensitive interpolation
+                # Keep LeakyRelu as a native op; decomposed Less/Where/Mul graphs have caused JSEP regressions.
+                'LeakyRelu',
+            ],
+        )
+    except ValueError as conversion_error:
+        if 'already converted to float16' in str(conversion_error).lower():
+            print('Float16 conversion skipped: model is already float16-ready.')
+        else:
+            raise
+
+    # 2.5 Prune dead initializers left behind by conversion/fusion passes.
+    # This reduces model load overhead and avoids noisy ORT unused-initializer warnings.
+    used_inputs = set()
+    for node in model.graph.node:
+        for node_input in node.input:
+            if node_input:
+                used_inputs.add(node_input)
+
+    total_initializers = len(model.graph.initializer)
+    if total_initializers > 0:
+        keep_initializers = [
+            initializer for initializer in model.graph.initializer
+            if initializer.name in used_inputs
+        ]
+        removed_initializers = total_initializers - len(keep_initializers)
+        if removed_initializers > 0:
+            del model.graph.initializer[:]
+            model.graph.initializer.extend(keep_initializers)
+            print(
+                f"Pruned {removed_initializers} unused initializers "
+                f"({len(keep_initializers)} retained)."
+            )
+
     onnx.checker.check_model(model)
     onnx.save(model, onnx_output_path)
 
@@ -814,7 +1013,7 @@ def convert_mangajanai_to_onnx(
         build_models,
         state_dict_transform=_remap_old_esrgan_keys,
         onnx_output_path=onnx_output_path,
-        simplify_graph=False,
+        simplify_graph=True,
     )
 
 

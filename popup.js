@@ -14,8 +14,6 @@ const FALLBACK_ONNX_MODEL_OPTIONS = [
   { key: 'realesr-animevideov3', title: 'RealESR AnimeVideo v3' },
   { key: 'up2x-latest-conservative', title: 'RealCUGAN Conservative' },
   { key: 'up2x-latest-denoise1x', title: 'RealCUGAN 2X Denoise 1x' },
-  { key: 'animejanai-hd-v3sharp1-compact', title: 'AnimeJaNai HD V3 Sharp1 Compact' },
-  { key: 'animejanai-hd-v3sharp1-superultracompact', title: 'AnimeJaNai HD V3 Sharp1 SuperUltraCompact' },
   { key: 'mangajanai-1200p-v1', title: 'MangaJaNai 2x 1200p V1' },
   { key: 'mangajanai-1600p-v1', title: 'MangaJaNai 2x 1600p V1' },
   { key: 'illustrationjanai-v1', title: 'IllustrationJaNai 2x V1' }
@@ -25,19 +23,13 @@ const ONNX_MODEL_HINTS = {
     runtime: 'Runtime ≈ 1.1 second'
   },
   'up2x-latest-conservative': {
-    runtime: 'Runtime ≈ 2.4 seconds'
+    runtime: 'Runtime ≈ 4 seconds'
   },
   'up2x-latest-denoise1x': {
-    runtime: 'Runtime ≈ 2.5 seconds'
-  },
-  'animejanai-hd-v3sharp1-compact': {
-    runtime: 'Runtime ≈ 2.4 seconds'
-  },
-  'animejanai-hd-v3sharp1-superultracompact': {
-    runtime: 'Runtime ≈ 2.1 seconds'
+    runtime: 'Runtime ≈ 4 seconds'
   },
   'mangajanai-1200p-v1': {
-    runtime: 'Runtime ≈ 3.1 seconds'
+    runtime: 'Runtime ≈ 4 seconds'
   },
   'mangajanai-1600p-v1': {
     runtime: 'Runtime ≈ 2.5 seconds'

@@ -14,6 +14,7 @@ const ONNX_WORKER_PENDING_WARNING_MS = 5000;
 const ONNX_WORKER_MAX_INFLIGHT_RUN_REQUESTS = 1;
 const ONNX_INIT_RETRY_BASE_DELAY_MS = 1000;
 const ONNX_INIT_RETRY_MAX_DELAY_MS = 30000;
+const ONNX_INIT_COOLDOWN_AUTO_WAIT_MAX_MS = 1500;
 const ONNX_TILE_MAX_PARALLELISM = 1;
 
 function createOnnxWorkerLaneState() {
@@ -28,7 +29,8 @@ function createOnnxWorkerLaneState() {
         initialized: false,
         selectedProvider: null,
         consecutiveInitFailures: 0,
-        blockedUntilMs: 0
+        blockedUntilMs: 0,
+        lastInitErrorMessage: null
     };
 }
 
@@ -168,6 +170,7 @@ function applyOnnxWorkerInitSuccess(laneState, lane, selectedProvider) {
     laneState.selectedProvider = selectedProvider || 'wasm-worker';
     laneState.consecutiveInitFailures = 0;
     laneState.blockedUntilMs = 0;
+    laneState.lastInitErrorMessage = null;
 
     if (lane === ONNX_WORKER_LANE_FOREGROUND) {
         onnxInitialized = true;
@@ -179,6 +182,7 @@ function applyOnnxWorkerInitFailure(laneState, lane, startedAt, error) {
     laneState.consecutiveInitFailures = (laneState.consecutiveInitFailures || 0) + 1;
     const delayMs = getOnnxInitRetryDelayMs(laneState.consecutiveInitFailures);
     laneState.blockedUntilMs = getOnnxNow() + delayMs;
+    laneState.lastInitErrorMessage = String(error?.message || error || 'Unknown ONNX init error');
 
     runtimeLog('onnx:init-failed', {
         lane,
@@ -221,6 +225,13 @@ function formatOnnxDurationMs(startAt, endAt = getOnnxNow()) {
     return Number((endAt - startAt).toFixed(2));
 }
 
+function waitForOnnxInitCooldown(remainingMs) {
+    const normalized = Number.isFinite(remainingMs) ? Math.max(0, Math.ceil(remainingMs)) : 0;
+    return new Promise((resolve) => {
+        window.setTimeout(resolve, normalized);
+    });
+}
+
 function getOnnxLibrary() {
     const lib = window.ort;
     return lib && typeof lib === 'object' ? lib : null;
@@ -254,7 +265,7 @@ function getOnnxOrtScriptUrl() {
     if (!chrome?.runtime?.getURL) {
         throw new Error('chrome.runtime.getURL is unavailable for ONNX Runtime script loading');
     }
-    return chrome.runtime.getURL('node_modules/onnxruntime-web/dist/ort.all.min.js');
+    return chrome.runtime.getURL('node_modules/onnxruntime-web/dist/ort.all.bundle.min.mjs');
 }
 
 function getOnnxOrtDistUrl() {
@@ -445,12 +456,27 @@ function getOrCreateOnnxWorker(lane = ONNX_WORKER_LANE_FOREGROUND) {
         throw new Error('Dedicated workers are not supported in this runtime');
     }
 
-    laneState.bootstrapUrl = createOnnxWorkerBootstrapUrl();
-    const worker = new Worker(laneState.bootstrapUrl);
-    runtimeLog('onnx:worker-bootstrap-created', {
-        workerScriptUrl: getOnnxWorkerUrl(),
-        lane: normalizedLane
-    });
+    const workerScriptUrl = getOnnxWorkerUrl();
+    let worker = null;
+
+    try {
+        // Prefer direct extension URL worker creation. This avoids blob-origin
+        // importScripts fetch failures on pages with opaque/sandboxed contexts.
+        worker = new Worker(workerScriptUrl);
+        runtimeLog('onnx:worker-created-direct', {
+            workerScriptUrl,
+            lane: normalizedLane
+        });
+    } catch (directError) {
+        laneState.bootstrapUrl = createOnnxWorkerBootstrapUrl();
+        worker = new Worker(laneState.bootstrapUrl);
+        runtimeLog('onnx:worker-bootstrap-created', {
+            workerScriptUrl,
+            lane: normalizedLane,
+            directCreateError: String(directError?.message || directError)
+        });
+    }
+
     worker.addEventListener('message', createOnnxWorkerMessageHandler(laneState, normalizedLane));
     worker.addEventListener('error', (event) => {
         const error = new Error(event?.message || 'Unknown ONNX worker error');
@@ -529,11 +555,24 @@ async function ensureOnnxWorkerReady(lane = ONNX_WORKER_LANE_FOREGROUND) {
     const now = getOnnxNow();
 
     if (laneState.blockedUntilMs > now) {
+        const remainingMs = Math.round(laneState.blockedUntilMs - now);
+        if (remainingMs <= ONNX_INIT_COOLDOWN_AUTO_WAIT_MAX_MS) {
+            runtimeLog('onnx:init-cooldown-wait', {
+                lane: normalizedLane,
+                remainingMs,
+                consecutiveInitFailures: laneState.consecutiveInitFailures,
+                lastInitErrorMessage: laneState.lastInitErrorMessage
+            });
+            await waitForOnnxInitCooldown(remainingMs);
+            return ensureOnnxWorkerReady(normalizedLane);
+        }
+
         console.warn(`[NH] onnx-blocked lane=${normalizedLane}`, {
-            remainingMs: Math.round(laneState.blockedUntilMs - now),
-            consecutiveInitFailures: laneState.consecutiveInitFailures
+            remainingMs,
+            consecutiveInitFailures: laneState.consecutiveInitFailures,
+            lastInitErrorMessage: laneState.lastInitErrorMessage
         });
-        throw new Error(`ONNX worker init cooldown active for lane ${normalizedLane}`);
+        throw new Error(`ONNX worker init cooldown active for lane ${normalizedLane}; last error: ${laneState.lastInitErrorMessage || 'unknown'}`);
     }
 
     if (laneState.initialized && laneState.worker) {

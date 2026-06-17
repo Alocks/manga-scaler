@@ -156,13 +156,13 @@ function postWorkerLog(event, payload = {}) {
     });
 }
 
-function loadOrtRuntime(ortScriptUrl) {
+async function loadOrtRuntime(ortScriptUrl) {
     if (workerOrt) {
         return workerOrt;
     }
 
-    importScripts(ortScriptUrl);
-    workerOrt = self.ort;
+    const ortModule = await import(ortScriptUrl);
+    workerOrt = ortModule?.default || ortModule?.ort || ortModule;
 
     if (!workerOrt || !workerOrt.InferenceSession || typeof workerOrt.Tensor !== 'function') {
         throw new Error('ONNX Runtime Web failed to initialize inside worker');
@@ -859,7 +859,7 @@ async function ensureWorkerSession(payload) {
 
     workerInitPromise = (async () => {
         const startedAt = getWorkerNow();
-        const lib = loadOrtRuntime(payload.ortScriptUrl);
+        const lib = await loadOrtRuntime(payload.ortScriptUrl);
         workerOnnxProfilingEnabled = !!payload.onnxProfilingEnabled;
         configureWorkerEnvironment(lib, payload.ortDistUrl);
 

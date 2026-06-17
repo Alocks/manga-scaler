@@ -60,16 +60,18 @@ popd >/dev/null
 
 echo "[build] Preparing minimal extension payload..."
 mkdir -p "$PAYLOAD_DIR/src/runtime"
+mkdir -p "$PAYLOAD_DIR/src/workers"
 for file in manifest.json content.js popup.html popup.js rules.json LICENSE; do
   cp "$file" "$PAYLOAD_DIR/"
 done
 cp src/runtime/runtime.bundle.js "$PAYLOAD_DIR/src/runtime/runtime.bundle.js"
+cp src/workers/onnxruntime.worker.js "$PAYLOAD_DIR/src/workers/onnxruntime.worker.js"
 
 mkdir -p "$PAYLOAD_DIR/node_modules/anime4k-webgpu/lib"
 cp -R node_modules/anime4k-webgpu/lib/. "$PAYLOAD_DIR/node_modules/anime4k-webgpu/lib/"
 
 mkdir -p "$PAYLOAD_DIR/models"
-cp models/* "$PAYLOAD_DIR/models/"
+cp models/*.onnx "$PAYLOAD_DIR/models/"
 
 mkdir -p "$PAYLOAD_DIR/node_modules/anime4k-webgl"
 
@@ -77,6 +79,9 @@ cp "$ANIME4K_SRC_DIR/dist/anime4k.js" "$PAYLOAD_DIR/node_modules/anime4k-webgl/a
 
 mkdir -p "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist"
 cp node_modules/onnxruntime-web/dist/ort.all.min.js "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort.all.min.js"
+cp node_modules/onnxruntime-web/dist/ort.all.bundle.min.mjs "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort.all.bundle.min.mjs"
+cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs"
+cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm"
 
 echo "[build] Verifying required payload files..."
 required_files=(
@@ -87,9 +92,13 @@ required_files=(
   "$PAYLOAD_DIR/popup.js"
   "$PAYLOAD_DIR/rules.json"
   "$PAYLOAD_DIR/src/runtime/runtime.bundle.js"
+  "$PAYLOAD_DIR/src/workers/onnxruntime.worker.js"
   "$PAYLOAD_DIR/node_modules/anime4k-webgpu/lib/index.js"
   "$PAYLOAD_DIR/node_modules/anime4k-webgl/anime4k.js"
+  "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort.all.bundle.min.mjs"
   "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort.all.min.js"
+  "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs"
+  "$PAYLOAD_DIR/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm"
 )
 
 for file in "${required_files[@]}"; do

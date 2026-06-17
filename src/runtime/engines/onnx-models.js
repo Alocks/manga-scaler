@@ -148,48 +148,6 @@ const ILLUSTRATIONJANAI_V1_ONNX_MODEL = {
     outputChannels: 3
 };
 
-const ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX_MODEL = {
-    key: 'animejanai-hd-v3sharp1-compact',
-    title: 'AnimeJaNai HD V3 Sharp1 Compact',
-    label: 'ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX',
-    modelPath: 'models/2x_AnimeJaNai_HD_V3Sharp1_Compact.onnx',
-    externalDataPath: null,
-    externalDataPathAliases: [],
-    cacheSchemaVersion: 'v3',
-    inputAlignment: 2,
-    fixedInputWidth: 0,
-    fixedInputHeight: 0,
-    maxSinglePassPixels: 1048576,
-    maxForegroundPixels: 3145728,
-    tileOverlapPixels: 8,
-    minTileEdgePixels: 128,
-    maxTileEdgePixels: 464,
-    queueParallelImages: 1,
-    inputChannels: 3,
-    outputChannels: 3
-};
-
-const ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX_MODEL = {
-    key: 'animejanai-hd-v3sharp1-superultracompact',
-    title: 'AnimeJaNai HD V3 Sharp1 SuperUltraCompact',
-    label: 'ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX',
-    modelPath: 'models/2x_AnimeJaNai_HD_V3Sharp1_SuperUltraCompact.onnx',
-    externalDataPath: null,
-    externalDataPathAliases: [],
-    cacheSchemaVersion: 'v3',
-    inputAlignment: 2,
-    fixedInputWidth: 0,
-    fixedInputHeight: 0,
-    maxSinglePassPixels: 1048576,
-    maxForegroundPixels: 3145728,
-    tileOverlapPixels: 8,
-    minTileEdgePixels: 128,
-    maxTileEdgePixels: 464,
-    queueParallelImages: 1,
-    inputChannels: 3,
-    outputChannels: 3
-};
-
 const DEFAULT_ONNX_MODEL_KEY = REALESR_ANIMEVIDEO_V3_ONNX_MODEL.key;
 
 const ONNX_MODEL_REGISTRY = Object.freeze({
@@ -198,8 +156,6 @@ const ONNX_MODEL_REGISTRY = Object.freeze({
     [MANGAJANAI_1200P_V1_ONNX_MODEL.key]: Object.freeze(MANGAJANAI_1200P_V1_ONNX_MODEL),
     [MANGAJANAI_1600P_V1_ONNX_MODEL.key]: Object.freeze(MANGAJANAI_1600P_V1_ONNX_MODEL),
     [ILLUSTRATIONJANAI_V1_ONNX_MODEL.key]: Object.freeze(ILLUSTRATIONJANAI_V1_ONNX_MODEL),
-    [ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX_MODEL.key]: Object.freeze(ANIMEJANAI_HD_V3SHARP1_COMPACT_ONNX_MODEL),
-    [ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX_MODEL.key]: Object.freeze(ANIMEJANAI_HD_V3SHARP1_SUPERULTRACOMPACT_ONNX_MODEL),
     [REALESR_ANIMEVIDEO_V3_ONNX_MODEL.key]: Object.freeze(REALESR_ANIMEVIDEO_V3_ONNX_MODEL)
 });
 

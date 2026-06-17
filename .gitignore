@@ -152,3 +152,4 @@ src/runtime/runtime.bundle.js
 .venv
 *.pyc
 *.pth
+*.jpg

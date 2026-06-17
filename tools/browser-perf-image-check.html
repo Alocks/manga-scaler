@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NH Scaler ONNX Image Perf Check</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; margin: 20px; color: #111; }
+    h1 { margin: 0 0 12px; }
+    #status { margin: 10px 0 16px; font-family: Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; max-width: 1200px; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; }
+    th { background: #f6f6f6; }
+    .ok { color: #0a7a2f; }
+    .err { color: #b00020; }
+  </style>
+  <script>
+    if (!globalThis.chrome) globalThis.chrome = {};
+    if (!globalThis.chrome.runtime) globalThis.chrome.runtime = {};
+    if (typeof globalThis.chrome.runtime.getURL !== 'function') {
+      globalThis.chrome.runtime.getURL = (p) => new URL('/' + String(p || '').replace(/^\/+/, ''), location.href).toString();
+    }
+
+    globalThis.MangaScalerDebugEnabled = false;
+    globalThis.MangaScalerProfiling = {
+      isEnabled: () => false,
+      isOnnxEnabled: () => false
+    };
+  </script>
+  <script src="/node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
+  <script src="/src/runtime/runtime.bundle.js"></script>
+</head>
+<body>
+  <h1>ONNX Browser Image Performance Check</h1>
+  <div id="status">Preparing...</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Model Key</th>
+        <th>Image</th>
+        <th>Dims</th>
+        <th>Init (ms)</th>
+        <th>Run 1 (ms)</th>
+        <th>Run 2 (ms)</th>
+        <th>Avg (ms)</th>
+        <th>Run Mode</th>
+        <th>Output</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+
+    const params = new URLSearchParams(location.search);
+    const imageParam = params.get('image');
+    const imageStart = Number(params.get('start') || 6);
+    const imageEnd = Number(params.get('end') || 9);
+    const imageQueue = imageParam
+      ? [imageParam]
+      : Array.from({ length: Math.max(0, imageEnd - imageStart + 1) }, (_, i) => `${imageStart + i}.jpg`);
+
+    const MODEL_KEYS = [
+      'mangajanai-1200p-v1',
+      'mangajanai-1600p-v1',
+      'illustrationjanai-v1'
+    ];
+
+    function addRow(cells) {
+      const tr = document.createElement('tr');
+      for (const cell of cells) {
+        const td = document.createElement('td');
+        td.textContent = String(cell);
+        tr.appendChild(td);
+      }
+      resultsEl.appendChild(tr);
+    }
+
+    async function loadImage(path) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = '/' + path;
+      await img.decode();
+      return img;
+    }
+
+    async function runOne(modelKey, imagePath, img) {
+      const adapter = window.OnnxRuntimeAdapter;
+      if (!adapter || typeof adapter.upscale !== 'function' || typeof adapter.prewarm !== 'function') {
+        throw new Error('OnnxRuntimeAdapter is unavailable in runtime bundle');
+      }
+
+      if (typeof window.resetOnnxWorkerState === 'function') {
+        window.resetOnnxWorkerState('foreground');
+      }
+
+      const runtimeSettings = {
+        selectedBackend: 'onnxruntime',
+        selectedOnnxModel: modelKey,
+        selectedOnnxLane: 'foreground'
+      };
+
+      const initStart = performance.now();
+      await adapter.prewarm(runtimeSettings);
+      const initMs = performance.now() - initStart;
+
+      const out1 = document.createElement('canvas');
+      const out2 = document.createElement('canvas');
+
+      const run1Start = performance.now();
+      const run1Meta = await adapter.upscale(img, out1, runtimeSettings, { lane: 'foreground' });
+      const run1Ms = performance.now() - run1Start;
+
+      const run2Start = performance.now();
+      const run2Meta = await adapter.upscale(img, out2, runtimeSettings, { lane: 'foreground' });
+      const run2Ms = performance.now() - run2Start;
+
+      const avgMs = (run1Ms + run2Ms) / 2;
+      const runMode = run2Meta?.runMode || run1Meta?.runMode || 'unknown';
+      const outDims = `${out2.width}x${out2.height}`;
+
+      return { imagePath, initMs, run1Ms, run2Ms, avgMs, runMode, outDims };
+    }
+
+    async function main() {
+      statusEl.textContent = `Running Manga Scaler runtime queue: ${imageQueue.join(', ')}`;
+
+      for (const imageName of imageQueue) {
+        const imagePath = `model_converter/images_test/${imageName}`;
+        let img;
+        let dims = 'unknown';
+
+        try {
+          img = await loadImage(imagePath);
+          dims = `${img.naturalWidth || img.width}x${img.naturalHeight || img.height}`;
+        } catch (err) {
+          addRow(['(all models)', imagePath, 'unknown', '-', '-', '-', '-', 'error', `Image load failed: ${String(err)}`]);
+          continue;
+        }
+
+        for (const modelKey of MODEL_KEYS) {
+          try {
+            const r = await runOne(modelKey, imagePath, img);
+            addRow([
+              modelKey,
+              imagePath,
+              dims,
+              r.initMs.toFixed(2),
+              r.run1Ms.toFixed(2),
+              r.run2Ms.toFixed(2),
+              r.avgMs.toFixed(2),
+              r.runMode,
+              r.outDims
+            ]);
+          } catch (err) {
+            addRow([modelKey, imagePath, dims, '-', '-', '-', '-', 'error', String(err)]);
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+
+      statusEl.textContent = 'Complete';
+      statusEl.className = 'ok';
+    }
+
+    main().catch((err) => {
+      statusEl.textContent = `Failed: ${String(err)}`;
+      statusEl.className = 'err';
+    });
+  </script>
+</body>
+</html>

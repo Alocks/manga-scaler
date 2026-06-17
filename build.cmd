@@ -47,21 +47,24 @@ mkdir "%TMP_DIR%" || goto :fail
 call git clone https://github.com/monyone/Anime4K.js "%ANIME4K_SRC_DIR%" || goto :fail
 pushd "%ANIME4K_SRC_DIR%" || goto :fail
 call yarn install || goto :fail
-call yarn build >nul 2>&1 || goto :fail
+set "NODE_ENV=production"
+call npx tsdown >nul 2>&1 || goto :fail
 popd || goto :fail
 
 echo [build] Preparing minimal extension payload...
 mkdir "%PAYLOAD_DIR%" || goto :fail
 mkdir "%PAYLOAD_DIR%\src" || goto :fail
 mkdir "%PAYLOAD_DIR%\src\runtime" || goto :fail
+mkdir "%PAYLOAD_DIR%\src\workers" || goto :fail
 for %%F in (manifest.json content.js popup.html popup.js rules.json LICENSE) do (
   copy /y "%%F" "%PAYLOAD_DIR%\" >nul || goto :fail
 )
 copy /y src\runtime\runtime.bundle.js "%PAYLOAD_DIR%\src\runtime\runtime.bundle.js" >nul || goto :fail
+copy /y src\workers\onnxruntime.worker.js "%PAYLOAD_DIR%\src\workers\onnxruntime.worker.js" >nul || goto :fail
 
 rem Copy all models
 mkdir "%PAYLOAD_DIR%\models" || goto :fail
-copy /y models\* "%PAYLOAD_DIR%\models\" >nul || goto :fail
+copy /y models\*.onnx "%PAYLOAD_DIR%\models\" >nul || goto :fail
 
 mkdir "%PAYLOAD_DIR%\node_modules\anime4k-webgpu\lib" || goto :fail
 robocopy node_modules\anime4k-webgpu\lib "%PAYLOAD_DIR%\node_modules\anime4k-webgpu\lib" /E /NFL /NDL /NJH /NJS /NC /NS >nul
@@ -70,6 +73,9 @@ if errorlevel 8 goto :fail
 rem Add onnxruntime-web
 mkdir "%PAYLOAD_DIR%\node_modules\onnxruntime-web\dist" || goto :fail
 copy /y "node_modules\onnxruntime-web\dist\ort.all.min.js" "%PAYLOAD_DIR%\node_modules\onnxruntime-web\dist\ort.all.min.js" >nul || goto :fail
+copy /y "node_modules\onnxruntime-web\dist\ort.all.bundle.min.mjs" "%PAYLOAD_DIR%\node_modules\onnxruntime-web\dist\ort.all.bundle.min.mjs" >nul || goto :fail
+copy /y "node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.jsep.mjs" "%PAYLOAD_DIR%\node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.jsep.mjs" >nul || goto :fail
+copy /y "node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.jsep.wasm" "%PAYLOAD_DIR%\node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.jsep.wasm" >nul || goto :fail
 
 mkdir "%PAYLOAD_DIR%\node_modules\anime4k-webgl" || goto :fail
 copy /y "%ANIME4K_SRC_DIR%\dist\anime4k.js" "%PAYLOAD_DIR%\node_modules\anime4k-webgl\anime4k.js" >nul || goto :fail
@@ -84,9 +90,13 @@ for %%F in (
   "popup.js"
   "rules.json"
   "src\runtime\runtime.bundle.js"
+  "src\workers\onnxruntime.worker.js"
   "node_modules\anime4k-webgpu\lib\index.js"
   "node_modules\anime4k-webgl\anime4k.js"
+  "node_modules\onnxruntime-web\dist\ort.all.bundle.min.mjs"
   "node_modules\onnxruntime-web\dist\ort.all.min.js"
+  "node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.jsep.mjs"
+  "node_modules\onnxruntime-web\dist\ort-wasm-simd-threaded.jsep.wasm"
 ) do (
   if not exist "%PAYLOAD_DIR%\%%~F" goto :missing_payload
 )
