@@ -16,6 +16,7 @@ const runtimeSourceGroups = Object.freeze({
     'src/runtime/sources/base_source.js',
     'src/runtime/sources/nhentai.js',
     'src/runtime/sources/comix.js',
+    'src/runtime/sources/atsu.js',
     'src/runtime/sources/mangadex.js',
     'src/runtime/sources/mangakakalot_manganato.js'
   ],
