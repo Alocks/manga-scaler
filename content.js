@@ -19,7 +19,18 @@ const ENABLE_ONNX_PROFILING = false;
 const ALWAYS_LOG_LABELS = new Set([
     'bg-process:skip-cached',
     'bg-process:upscale-time',
-    'process:upscale-time'
+    'process:upscale-time',
+    'process:apply-cached',
+    'process:cache-write',
+    'cache:memory-hit',
+    'onnx:run-tiled-start',
+    'onnx:tiled-layout',
+    'onnx:tiled-run-success',
+    'onnx:run-success',
+    'onnx:run-failed',
+    'onnx:pass-profile',
+    'onnx:worker-pass-inference-complete',
+    'onnx:worker-pass-still-running'
 ]);
 
 function bootstrapLog(label, data = {}) {

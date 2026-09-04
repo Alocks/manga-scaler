@@ -104,10 +104,13 @@ async function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
     if (!(processedBlob instanceof Blob)) return null;
 
     rememberOriginalImageState(img, sourceUrl);
-    revokeProcessedBlobUrl(img);
 
-    const objectUrl = URL.createObjectURL(processedBlob);
-    img.dataset.aiBlobUrl = objectUrl;
+    let objectUrl = img.dataset.aiBlobUrl || null;
+    if (!objectUrl) {
+        objectUrl = URL.createObjectURL(processedBlob);
+        img.dataset.aiBlobUrl = objectUrl;
+    }
+
     img.dataset.aiProcessed = 'true';
     img.dataset.aiProcessedSrc = sourceUrl;
     delete img.dataset.aiProcessingSrc;
@@ -116,18 +119,9 @@ async function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
     img.removeAttribute('srcset');
     img.removeAttribute('sizes');
     img.style.setProperty('image-rendering', '-webkit-optimize-contrast');
-
-    // Pre-decode the blob URL in a hidden image so the browser has it fully
-    // decoded and in cache before we swap. The visible img.src assignment is
-    // then instant — no blank frame between original and upscaled.
-    await new Promise((resolve) => {
-        const preload = new Image();
-        preload.onload = resolve;
-        preload.onerror = resolve;
-        preload.src = objectUrl;
-    });
-
-    img.src = objectUrl;
+    if (img.currentSrc !== objectUrl && img.src !== objectUrl) {
+        img.src = objectUrl;
+    }
 
     return objectUrl;
 }
@@ -137,9 +131,10 @@ async function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
 // directly so the original image URL is never loaded — eliminating the
 // flash of the original image during page navigation.
 function applyCachedBlobFromSrcHook(img, sourceUrl, cachedBlob) {
-    const oldBlobUrl = img.dataset.aiBlobUrl;
-    if (oldBlobUrl) {
-        try { URL.revokeObjectURL(oldBlobUrl); } catch {}
+    let objectUrl = img.dataset.aiBlobUrl || null;
+    if (!objectUrl) {
+        objectUrl = URL.createObjectURL(cachedBlob);
+        img.dataset.aiBlobUrl = objectUrl;
     }
 
     // Force-update the original-src reference to the new page URL.
@@ -157,8 +152,6 @@ function applyCachedBlobFromSrcHook(img, sourceUrl, cachedBlob) {
         img.dataset.aiOriginalImageRenderingPriority = img.style.getPropertyPriority('image-rendering') || '';
     }
 
-    const objectUrl = URL.createObjectURL(cachedBlob);
-    img.dataset.aiBlobUrl = objectUrl;
     img.dataset.aiProcessed = 'true';
     img.dataset.aiProcessedSrc = sourceUrl;
     delete img.dataset.aiProcessingSrc;
@@ -279,7 +272,7 @@ function loadSourceImage(sourceUrl) {
     });
 }
 
-function canvasToBlob(canvas, type = 'image/png', quality) {
+function canvasToBlob(canvas, type = 'image/webp', quality = 0.98) {
     return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
             if (blob) {

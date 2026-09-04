@@ -163,10 +163,6 @@ function resolveBackgroundQueueExecution(runtimeSettings = getRuntimePreferenceS
             }
             return getDefaultBackgroundExecutionLane(slotIndex);
         },
-        dispose() {
-            if (typeof onnxAdapter.resetBackgroundWorkers === 'function') {
-                onnxAdapter.resetBackgroundWorkers(maxConcurrency);
-            }
-        }
+        dispose() {}
     };
 }

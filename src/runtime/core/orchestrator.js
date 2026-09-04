@@ -336,7 +336,13 @@ async function processCurrentImage(container) {
 
     const cachedBlob = await getProcessedCacheBlob(sourceUrl, runtimeSettings);
     if (cachedBlob) {
+        const applyStart = performance.now();
         await applyProcessedBlobToImage(img, sourceUrl, cachedBlob);
+        log('process:apply-cached', {
+            sourceUrl,
+            duration: (performance.now() - applyStart).toFixed(2) + 'ms',
+            blobBytes: cachedBlob.size
+        });
         return;
     }
 
@@ -448,30 +454,6 @@ async function processCurrentImage(container) {
 
         const processedBlob = await canvasToBlob(canvas);
 
-        const staleBeforeCacheWriteReason = getStaleForegroundJobReason(img, jobId, sourceUrl, parent);
-        if (staleBeforeCacheWriteReason && staleBeforeCacheWriteReason !== 'hidden-tab') {
-            const latestAfterBlob = getImageSourceUrl(img);
-            log('process:abort-stale', {
-                sourceUrl,
-                latestSrc: latestAfterBlob,
-                jobId,
-                activeJobId: img.dataset.aiJobId,
-                phase: 'before-cache-write',
-                reason: staleBeforeCacheWriteReason
-            });
-            delete img.dataset.aiProcessingSrc;
-            return;
-        }
-
-        const cacheWriteOk = await setProcessedCacheBlob(sourceUrl, processedBlob, runtimeSettings);
-        log('process:cache-write', {
-            sourceUrl,
-            page,
-            jobId,
-            ok: !!cacheWriteOk,
-            blobBytes: processedBlob.size
-        });
-
         const staleBeforeApplyReason = getStaleForegroundJobReason(img, jobId, sourceUrl, parent);
         if (staleBeforeApplyReason) {
             log('process:skip-apply', {
@@ -480,13 +462,36 @@ async function processCurrentImage(container) {
                 jobId,
                 reason: staleBeforeApplyReason,
                 blobBytes: processedBlob.size,
-                cacheWriteOk: !!cacheWriteOk
+                cacheWriteOk: null
             });
             delete img.dataset.aiProcessingSrc;
             return;
         }
 
         await applyProcessedBlobToImage(img, sourceUrl, processedBlob);
+
+        void setProcessedCacheBlob(sourceUrl, processedBlob, runtimeSettings)
+            .then((cacheWriteOk) => {
+                log('process:cache-write', {
+                    sourceUrl,
+                    page,
+                    jobId,
+                    ok: !!cacheWriteOk,
+                    blobBytes: processedBlob.size,
+                    async: true
+                });
+            })
+            .catch((error) => {
+                log('process:cache-write', {
+                    sourceUrl,
+                    page,
+                    jobId,
+                    ok: false,
+                    blobBytes: processedBlob.size,
+                    async: true,
+                    error: String(error)
+                });
+            });
     } catch (err) {
         if (shouldSkipSourceAfterError(err)) {
             img.dataset.aiSkipSource = sourceUrl;

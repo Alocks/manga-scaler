@@ -44,10 +44,7 @@ function rememberProcessedCacheEntry(cacheKey, blob) {
     trimProcessedCacheEntries();
 }
 
-async function isValidProcessedBlob(blob) {
-    // Guard against tiny/corrupt cache entries before decode validation.
-    if (!(blob instanceof Blob) || blob.size <= MIN_VALID_PROCESSED_BLOB_BYTES) return false;
-
+async function decodeValidateProcessedBlob(blob) {
     try {
         const bitmap = await createImageBitmap(blob);
         const isValid = bitmap.width > 0 && bitmap.height > 0;
@@ -58,6 +55,16 @@ async function isValidProcessedBlob(blob) {
     } catch {
         return false;
     }
+}
+
+async function isValidProcessedBlob(blob) {
+    // Guard against tiny/corrupt cache entries before decode validation.
+    if (!(blob instanceof Blob) || blob.size <= MIN_VALID_PROCESSED_BLOB_BYTES) return false;
+    return decodeValidateProcessedBlob(blob);
+}
+
+function isLikelyFreshProcessedBlob(blob) {
+    return blob instanceof Blob && blob.size > MIN_VALID_PROCESSED_BLOB_BYTES;
 }
 
 function getProcessedCacheSignature(runtimeSettings = getRuntimePreferenceSnapshot()) {
@@ -135,13 +142,8 @@ async function getProcessedCacheBlob(url, runtimeSettings = getRuntimePreference
 
     const memoryBlob = getProcessedCacheEntry(cacheKey);
     if (memoryBlob) {
-        if (await isValidProcessedBlob(memoryBlob)) {
-            return memoryBlob;
-        }
-
-        await deleteProcessedCacheEntryByKey(cacheKey);
-        runtimeLog('cache:evicted-invalid-memory-blob', { cacheKey, url, size: memoryBlob.size });
-        return null;
+        runtimeLog('cache:memory-hit', { cacheKey, url, size: memoryBlob.size });
+        return memoryBlob;
     }
 
     const db = await openProcessedCacheDb();
@@ -181,7 +183,9 @@ async function setProcessedCacheBlob(url, blob, runtimeSettings = getRuntimePref
     const cacheKey = getProcessedCacheKey(url, runtimeSettings);
     if (!cacheKey || !blob) return false;
 
-    if (!(await isValidProcessedBlob(blob))) {
+    // Freshly rendered canvas blobs have already passed canvas validity checks;
+    // only persisted/restored blobs need a full decode validation pass.
+    if (!isLikelyFreshProcessedBlob(blob)) {
         await deleteProcessedCacheEntryByKey(cacheKey);
         runtimeLog('cache:skip-invalid-write', { cacheKey, url, size: blob.size });
         return false;
