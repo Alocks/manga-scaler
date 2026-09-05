@@ -20,6 +20,7 @@ const ONNX_TILE_MAX_PARALLELISM = 1;
 function createOnnxWorkerLaneState() {
     return {
         worker: null,
+        workerCreatePromise: null,
         readyPromise: null,
         requestId: 0,
         bootstrapUrl: null,
@@ -40,6 +41,7 @@ const onnxWorkerLaneStates = {
 };
 
 const ONNX_WORKER_PATH = 'src/workers/onnxruntime.worker.js';
+const ONNX_ORT_SCRIPT_PATH = 'node_modules/onnxruntime-web/dist/ort.all.min.js';
 const ONNX_CACHE_DB_NAME = 'manga-scaler-onnx-artifacts';
 const ONNX_CACHE_STORE_NAME = 'artifacts';
 const ONNX_TILE_YIELD_MS = 0;
@@ -48,6 +50,8 @@ const ONNX_INIT_WARMUP_TILE_EDGE_MAX = 512;
 const ONNX_MODEL_SWITCH_FALLBACK_KEY = 'realesr-animevideov3';
 let onnxCacheDbPromise = null;
 let activeOnnxModelKey = null;
+let onnxDirectSessionPromise = null;
+let onnxDirectProviderBlocked = false;
 
 function getOnnxNow() {
     if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
@@ -233,8 +237,29 @@ function waitForOnnxInitCooldown(remainingMs) {
 }
 
 function getOnnxLibrary() {
-    const lib = window.ort;
+    const lib = globalThis.ort;
     return lib && typeof lib === 'object' ? lib : null;
+}
+
+function isOnnxWorkerStartupCompatibilityError(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    if (!message) return false;
+
+    return (
+        message.includes('failed to construct \'worker\'') ||
+        message.includes('failed to construct "worker"') ||
+        message.includes('violates the following content security policy directive') ||
+        message.includes('blob:') && message.includes('worker') && message.includes('blocked') ||
+        message.includes('dedicated workers are not supported')
+    );
+}
+
+function isLikelyStrictCspPage() {
+    return /(?:^|\.)atsu\.moe$/i.test(String(window.location.hostname || ''));
+}
+
+function shouldUseOnnxDirectProvider() {
+    return onnxDirectProviderBlocked || isLikelyStrictCspPage();
 }
 
 function getOnnxModelUrl() {
@@ -265,7 +290,7 @@ function getOnnxOrtScriptUrl() {
     if (!chrome?.runtime?.getURL) {
         throw new Error('chrome.runtime.getURL is unavailable for ONNX Runtime script loading');
     }
-    return chrome.runtime.getURL('node_modules/onnxruntime-web/dist/ort.all.bundle.min.mjs');
+    return chrome.runtime.getURL(ONNX_ORT_SCRIPT_PATH);
 }
 
 function getOnnxOrtDistUrl() {
@@ -281,6 +306,166 @@ function getOnnxOrtWasmModuleUrl() {
 
 function getOnnxOrtWasmBinaryUrl() {
     return `${getOnnxOrtDistUrl()}ort-wasm-simd-threaded.jsep.wasm`;
+}
+
+function configureOnnxDirectEnvironment(lib) {
+    if (!lib?.env) return;
+
+    const distPath = getOnnxOrtDistUrl();
+    if (lib.env.wasm) {
+        lib.env.wasm.wasmPaths = {
+            mjs: `${distPath}ort-wasm-simd-threaded.jsep.mjs`,
+            wasm: `${distPath}ort-wasm-simd-threaded.jsep.wasm`
+        };
+        lib.env.wasm.numThreads = 1;
+        lib.env.wasm.proxy = false;
+    }
+}
+
+async function ensureOnnxDirectSession() {
+    if (onnxDirectSessionPromise) {
+        return onnxDirectSessionPromise;
+    }
+
+    const lib = getOnnxLibrary();
+    if (!lib?.InferenceSession || typeof lib.Tensor !== 'function') {
+        throw new Error('ONNX Runtime direct session library is unavailable');
+    }
+
+    onnxDirectSessionPromise = (async () => {
+        configureOnnxDirectEnvironment(lib);
+        const artifacts = await loadOnnxArtifacts();
+        const session = await lib.InferenceSession.create(artifacts.modelBytes, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all',
+            enableCpuMemArena: false,
+            enableMemPattern: false
+        });
+
+        runtimeLog('onnx:direct-init', {
+            model: onnxActiveModel.label,
+            modelPath: onnxActiveModel.modelPath,
+            provider: 'wasm-direct'
+        });
+
+        return {
+            lib,
+            session,
+            provider: 'wasm-direct',
+            inputName: session.inputNames?.[0] || 'input',
+            outputName: session.outputNames?.[0] || 'output'
+        };
+    })();
+
+    try {
+        return await onnxDirectSessionPromise;
+    } finally {
+        if (!onnxDirectSessionPromise) {
+            return;
+        }
+    }
+}
+
+function resetOnnxDirectSession() {
+    onnxDirectSessionPromise = null;
+    onnxDirectProviderBlocked = false;
+}
+
+async function runOnnxDirectInferencePass(workerInput, outputCanvas, executionOptions = {}) {
+    const direct = await ensureOnnxDirectSession();
+    const { lib, session, inputName, outputName } = direct;
+
+    let inputTensor = null;
+    try {
+        if (workerInput.imageBitmap != null && typeof lib.Tensor?.fromImage === 'function') {
+            inputTensor = await lib.Tensor.fromImage(workerInput.imageBitmap, {
+                tensorLayout: 'NCHW',
+                tensorFormat: 'RGB',
+                dataType: 'float32',
+                resizedWidth: workerInput.width,
+                resizedHeight: workerInput.height
+            });
+            if (typeof workerInput.imageBitmap.close === 'function') {
+                workerInput.imageBitmap.close();
+            }
+        } else {
+            const rgba = new Uint8ClampedArray(workerInput.rgbaBuffer);
+            const imageData = new ImageData(rgba, workerInput.width, workerInput.height);
+            inputTensor = await lib.Tensor.fromImage(imageData, {
+                tensorLayout: 'NCHW',
+                tensorFormat: 'RGB',
+                dataType: 'float32'
+            });
+        }
+
+        const outputs = await session.run({ [inputName]: inputTensor });
+        session.lastRunOutputs = outputs || null;
+        const outputTensor = outputs?.[outputName] || Object.values(outputs || {})[0];
+        if (!outputTensor || !Array.isArray(outputTensor.dims) || outputTensor.dims.length !== 4) {
+            throw new Error('Direct ONNX session returned an invalid output tensor');
+        }
+
+        const [batch, channels, outHeight, outWidth] = outputTensor.dims;
+        if (batch < 1 || (channels !== 1 && channels !== 3) || outWidth < 1 || outHeight < 1) {
+            throw new Error(`Direct ONNX session returned invalid dims: ${JSON.stringify(outputTensor.dims)}`);
+        }
+
+        const data = outputTensor.data;
+        const pixelCount = outWidth * outHeight;
+        const rgba = new Uint8ClampedArray(pixelCount * 4);
+        let maxValue = 0;
+        const sampleCount = Math.min(2048, data.length);
+        for (let i = 0; i < sampleCount; i++) {
+            const value = data[i];
+            if (Number.isFinite(value) && value > maxValue) {
+                maxValue = value;
+            }
+        }
+        const valueScale = maxValue > 10 ? 1 : 255;
+
+        rgba.fill(255);
+        if (channels === 1) {
+            for (let i = 0; i < pixelCount; i++) {
+                const v = Math.max(0, Math.min(255, Math.round(data[i] * valueScale)));
+                const rgbaIndex = i * 4;
+                rgba[rgbaIndex] = v;
+                rgba[rgbaIndex + 1] = v;
+                rgba[rgbaIndex + 2] = v;
+            }
+        } else {
+            const gBase = pixelCount;
+            const bBase = pixelCount * 2;
+            for (let i = 0; i < pixelCount; i++) {
+                const rgbaIndex = i * 4;
+                rgba[rgbaIndex] = Math.max(0, Math.min(255, Math.round(data[i] * valueScale)));
+                rgba[rgbaIndex + 1] = Math.max(0, Math.min(255, Math.round(data[gBase + i] * valueScale)));
+                rgba[rgbaIndex + 2] = Math.max(0, Math.min(255, Math.round(data[bBase + i] * valueScale)));
+            }
+        }
+
+        const workerResult = {
+            inputName,
+            inputDims: [1, channels, workerInput.height, workerInput.width],
+            outputDims: [1, channels, outHeight, outWidth],
+            outputWidth: outWidth,
+            outputHeight: outHeight,
+            rgbaBuffer: rgba.buffer,
+            provider: direct.provider
+        };
+
+        drawOnnxWorkerOutputToCanvas(workerResult, outputCanvas, executionOptions?.cropWidth ?? null, executionOptions?.cropHeight ?? null);
+        return workerResult;
+    } finally {
+        if (inputTensor && typeof inputTensor.dispose === 'function') {
+            inputTensor.dispose();
+        }
+        for (const tensor of Object.values(session.lastRunOutputs || {})) {
+            if (tensor && typeof tensor.dispose === 'function') {
+                tensor.dispose();
+            }
+        }
+        session.lastRunOutputs = null;
+    }
 }
 
 function cloneTypedArrayForTransfer(typedArray) {
@@ -408,6 +593,7 @@ function resetOnnxWorkerState(lane = ONNX_WORKER_LANE_FOREGROUND, terminate = tr
     }
 
     laneState.worker = null;
+    laneState.workerCreatePromise = null;
     laneState.readyPromise = null;
     laneState.initialized = false;
     laneState.selectedProvider = null;
@@ -433,50 +619,58 @@ function resetOnnxBackgroundWorkerLanes(maxParallelism = 1) {
     return lanes.length;
 }
 
-function createOnnxWorkerBootstrapUrl() {
+async function createOnnxWorkerBootstrapUrl() {
     if (!URL || typeof URL.createObjectURL !== 'function') {
         throw new Error('Blob worker bootstrap is unavailable in this runtime');
     }
 
     const workerScriptUrl = getOnnxWorkerUrl();
-    const bootstrapSource = `importScripts(${JSON.stringify(workerScriptUrl)});`;
+    const ortScriptUrl = getOnnxOrtScriptUrl();
+    const [workerResponse, ortResponse] = await Promise.all([
+        fetch(workerScriptUrl),
+        fetch(ortScriptUrl)
+    ]);
+
+    if (!workerResponse.ok) {
+        throw new Error(`Failed to fetch ONNX worker source: ${workerResponse.status} ${workerResponse.statusText}`);
+    }
+    if (!ortResponse.ok) {
+        throw new Error(`Failed to fetch ONNX Runtime source: ${ortResponse.status} ${ortResponse.statusText}`);
+    }
+
+    const [workerSource, ortSource] = await Promise.all([
+        workerResponse.text(),
+        ortResponse.text()
+    ]);
+    const bootstrapSource = `${ortSource}\n;globalThis.workerOrtPreload = globalThis.ort;\n${workerSource}`;
     const bootstrapBlob = new Blob([bootstrapSource], { type: 'application/javascript' });
     return URL.createObjectURL(bootstrapBlob);
 }
 
-function getOrCreateOnnxWorker(lane = ONNX_WORKER_LANE_FOREGROUND) {
-    const normalizedLane = normalizeOnnxExecutionLane(lane);
-    const laneState = getOnnxWorkerLaneState(normalizedLane);
-
-    if (laneState.worker) {
-        return laneState.worker;
-    }
-
-    if (typeof Worker !== 'function') {
-        throw new Error('Dedicated workers are not supported in this runtime');
-    }
-
-    const workerScriptUrl = getOnnxWorkerUrl();
-    let worker = null;
-
+async function createOnnxWorker(lane, workerScriptUrl) {
     try {
         // Prefer direct extension URL worker creation. This avoids blob-origin
         // importScripts fetch failures on pages with opaque/sandboxed contexts.
-        worker = new Worker(workerScriptUrl);
+        const worker = new Worker(workerScriptUrl);
         runtimeLog('onnx:worker-created-direct', {
             workerScriptUrl,
-            lane: normalizedLane
+            lane
         });
+        return { worker, bootstrapUrl: null, mode: 'direct' };
     } catch (directError) {
-        laneState.bootstrapUrl = createOnnxWorkerBootstrapUrl();
-        worker = new Worker(laneState.bootstrapUrl);
+        const bootstrapUrl = await createOnnxWorkerBootstrapUrl();
+        const worker = new Worker(bootstrapUrl);
         runtimeLog('onnx:worker-bootstrap-created', {
             workerScriptUrl,
-            lane: normalizedLane,
+            lane,
+            mode: 'inline-source',
             directCreateError: String(directError?.message || directError)
         });
+        return { worker, bootstrapUrl, mode: 'inline-source', directError };
     }
+}
 
+function attachOnnxWorkerEventHandlers(worker, laneState, normalizedLane) {
     worker.addEventListener('message', createOnnxWorkerMessageHandler(laneState, normalizedLane));
     worker.addEventListener('error', (event) => {
         const error = new Error(event?.message || 'Unknown ONNX worker error');
@@ -490,15 +684,44 @@ function getOrCreateOnnxWorker(lane = ONNX_WORKER_LANE_FOREGROUND) {
         resetOnnxWorkerState(normalizedLane, false);
         rejectAllOnnxWorkerRequests(laneState, error);
     });
+}
 
-    laneState.worker = worker;
-    return worker;
+async function prepareOnnxWorker(lane = ONNX_WORKER_LANE_FOREGROUND) {
+    const normalizedLane = normalizeOnnxExecutionLane(lane);
+    const laneState = getOnnxWorkerLaneState(normalizedLane);
+
+    if (laneState.worker) {
+        return laneState.worker;
+    }
+
+    if (laneState.workerCreatePromise) {
+        return laneState.workerCreatePromise;
+    }
+
+    if (typeof Worker !== 'function') {
+        throw new Error('Dedicated workers are not supported in this runtime');
+    }
+
+    const workerScriptUrl = getOnnxWorkerUrl();
+    laneState.workerCreatePromise = (async () => {
+        const created = await createOnnxWorker(normalizedLane, workerScriptUrl);
+        laneState.bootstrapUrl = created.bootstrapUrl;
+        laneState.worker = created.worker;
+        attachOnnxWorkerEventHandlers(created.worker, laneState, normalizedLane);
+        return created.worker;
+    })();
+
+    try {
+        return await laneState.workerCreatePromise;
+    } finally {
+        laneState.workerCreatePromise = null;
+    }
 }
 
 async function postOnnxWorkerRequest(type, payload, transferList = [], lane = ONNX_WORKER_LANE_FOREGROUND) {
     const normalizedLane = normalizeOnnxExecutionLane(lane);
     const laneState = getOnnxWorkerLaneState(normalizedLane);
-    const worker = getOrCreateOnnxWorker(normalizedLane);
+    const worker = await prepareOnnxWorker(normalizedLane);
     const requestId = ++laneState.requestId;
     const requestStartedAt = getOnnxNow();
 
@@ -1091,26 +1314,69 @@ async function runOnnxInferencePass(inputImage, outputCanvas, executionOptions =
     const workerInput = await imageToOnnxWorkerInput(workerSourceImage);
     workerInput.lane = executionLane;
     const tensorBuildEndAt = getOnnxNow();
-    await ensureOnnxWorkerReady(executionLane);
 
-    const inferenceStartAt = getOnnxNow();
-    const workerResult = await postOnnxWorkerRequest(
-        'run', workerInput,
-        workerInput.imageBitmap != null ? [workerInput.imageBitmap]
-            : workerInput.rgbaBuffer != null ? [workerInput.rgbaBuffer] : [],
-        executionLane
-    );
+    let workerResult;
+    let inferenceStartAt = getOnnxNow();
+    let drewDirectOutput = false;
+    if (shouldUseOnnxDirectProvider()) {
+        if (!onnxDirectProviderBlocked) {
+            onnxDirectProviderBlocked = true;
+            runtimeLog('onnx:direct-fallback', {
+                lane: executionLane,
+                reason: 'strict-csp-page'
+            });
+        }
+        const scaleX = needsInputPadding ? (workerInput.width / Math.max(1, inputWidth)) : 1;
+        const scaleY = needsInputPadding ? (workerInput.height / Math.max(1, inputHeight)) : 1;
+        workerResult = await runOnnxDirectInferencePass(workerInput, outputCanvas, {
+            cropWidth: needsInputPadding ? Math.max(1, Math.round(inputWidth * scaleX)) : null,
+            cropHeight: needsInputPadding ? Math.max(1, Math.round(inputHeight * scaleY)) : null
+        });
+        drewDirectOutput = true;
+    } else {
+        try {
+            await ensureOnnxWorkerReady(executionLane);
+        } catch (error) {
+            if (!isOnnxWorkerStartupCompatibilityError(error)) {
+                throw error;
+            }
+
+            onnxDirectProviderBlocked = true;
+            runtimeLog('onnx:direct-fallback', {
+                lane: executionLane,
+                reason: String(error?.message || error)
+            });
+            const scaleX = needsInputPadding ? (workerInput.width / Math.max(1, inputWidth)) : 1;
+            const scaleY = needsInputPadding ? (workerInput.height / Math.max(1, inputHeight)) : 1;
+            workerResult = await runOnnxDirectInferencePass(workerInput, outputCanvas, {
+                cropWidth: needsInputPadding ? Math.max(1, Math.round(inputWidth * scaleX)) : null,
+                cropHeight: needsInputPadding ? Math.max(1, Math.round(inputHeight * scaleY)) : null
+            });
+            drewDirectOutput = true;
+        }
+
+        if (!workerResult) {
+            workerResult = await postOnnxWorkerRequest(
+                'run', workerInput,
+                workerInput.imageBitmap != null ? [workerInput.imageBitmap]
+                    : workerInput.rgbaBuffer != null ? [workerInput.rgbaBuffer] : [],
+                executionLane
+            );
+        }
+    }
     const inferenceEndAt = getOnnxNow();
 
     const canvasWriteStartAt = getOnnxNow();
-    if (needsInputPadding) {
-        const scaleX = workerResult.outputWidth / workerInput.width;
-        const scaleY = workerResult.outputHeight / workerInput.height;
-        const croppedOutputWidth = Math.max(1, Math.round(inputWidth * scaleX));
-        const croppedOutputHeight = Math.max(1, Math.round(inputHeight * scaleY));
-        drawOnnxWorkerOutputToCanvas(workerResult, outputCanvas, croppedOutputWidth, croppedOutputHeight);
-    } else {
-        drawOnnxWorkerOutputToCanvas(workerResult, outputCanvas);
+    if (!drewDirectOutput) {
+        if (needsInputPadding) {
+            const scaleX = workerResult.outputWidth / workerInput.width;
+            const scaleY = workerResult.outputHeight / workerInput.height;
+            const croppedOutputWidth = Math.max(1, Math.round(inputWidth * scaleX));
+            const croppedOutputHeight = Math.max(1, Math.round(inputHeight * scaleY));
+            drawOnnxWorkerOutputToCanvas(workerResult, outputCanvas, croppedOutputWidth, croppedOutputHeight);
+        } else {
+            drawOnnxWorkerOutputToCanvas(workerResult, outputCanvas);
+        }
     }
     const canvasWriteEndAt = getOnnxNow();
 
@@ -1159,9 +1425,11 @@ async function runOnnxUpscaleTiled(sourceImage, outputCanvas, sourceWidth, sourc
     const maxTileParallelism = Math.max(1, Math.floor(ONNX_TILE_MAX_PARALLELISM));
     const tileExecutionLanes = getOnnxExecutionLanes(executionLane, maxTileParallelism);
 
-    await Promise.all(
-        tileExecutionLanes.map((lane) => ensureOnnxWorkerReady(lane))
-    );
+    if (!shouldUseOnnxDirectProvider()) {
+        await Promise.all(
+            tileExecutionLanes.map((lane) => ensureOnnxWorkerReady(lane))
+        );
+    }
 
     const destCtx = outputCanvas.getContext('2d', { alpha: true, desynchronized: true });
     if (!destCtx) {
@@ -1363,7 +1631,9 @@ async function runOnnxUpscale(tempImg, canvas, runtimeSettings = getRuntimePrefe
     });
 
     try {
-        await ensureOnnxWorkerReady(executionLane);
+        if (!shouldUseOnnxDirectProvider()) {
+            await ensureOnnxWorkerReady(executionLane);
+        }
         let runMeta;
 
         const useTiledPath =
@@ -1417,6 +1687,32 @@ async function runOnnxUpscale(tempImg, canvas, runtimeSettings = getRuntimePrefe
 async function prewarmOnnx(runtimeSettings = getRuntimePreferenceSnapshot()) {
     applyOnnxModelSelection(runtimeSettings);
     const startedAt = getOnnxNow();
+
+    if (shouldUseOnnxDirectProvider()) {
+        runtimeLog('onnx:prewarm-start', {
+            model: onnxActiveModel.label,
+            modelPath: onnxActiveModel.modelPath,
+            mode: 'direct-session-non-blocking'
+        });
+
+        if (!onnxBackgroundWarmupPromise) {
+            onnxBackgroundWarmupPromise = ensureOnnxDirectSession()
+                .then((directStatus) => {
+                    runtimeLog('onnx:prewarm-worker-success', {
+                        durationMs: formatOnnxDurationMs(startedAt),
+                        provider: directStatus?.provider || 'wasm-direct'
+                    });
+                })
+                .catch((error) => {
+                    runtimeLog('onnx:prewarm-worker-failed', {
+                        durationMs: formatOnnxDurationMs(startedAt),
+                        error: serializeOnnxError(error)
+                    });
+                });
+        }
+        return onnxBackgroundWarmupPromise;
+    }
+
     runtimeLog('onnx:prewarm-start', {
         model: onnxActiveModel.label,
         modelPath: onnxActiveModel.modelPath,
@@ -1455,6 +1751,7 @@ function resetOnnxAdapterState() {
 
     onnxInitialized = false;
     onnxSelectedProvider = null;
+    resetOnnxDirectSession();
     onnxWorkingCanvasPool = {
         [ONNX_WORKER_LANE_FOREGROUND]: Object.create(null),
         [ONNX_WORKER_LANE_BACKGROUND]: Object.create(null)

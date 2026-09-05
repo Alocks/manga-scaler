@@ -161,6 +161,11 @@ async function loadOrtRuntime(ortScriptUrl) {
         return workerOrt;
     }
 
+    if (globalThis.workerOrtPreload && globalThis.workerOrtPreload.InferenceSession && typeof globalThis.workerOrtPreload.Tensor === 'function') {
+        workerOrt = globalThis.workerOrtPreload;
+        return workerOrt;
+    }
+
     const ortModule = await import(ortScriptUrl);
     workerOrt = ortModule?.default || ortModule?.ort || ortModule;
 

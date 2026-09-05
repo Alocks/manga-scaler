@@ -99,18 +99,11 @@ function restoreOriginalImage(img) {
     delete img.dataset.aiJobId;
 }
 
-async function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
+function applyProcessedObjectUrlToImage(img, sourceUrl, objectUrl) {
     if (!(img instanceof HTMLImageElement)) return null;
-    if (!(processedBlob instanceof Blob)) return null;
+    if (typeof objectUrl !== 'string' || !objectUrl) return null;
 
-    rememberOriginalImageState(img, sourceUrl);
-
-    let objectUrl = img.dataset.aiBlobUrl || null;
-    if (!objectUrl) {
-        objectUrl = URL.createObjectURL(processedBlob);
-        img.dataset.aiBlobUrl = objectUrl;
-    }
-
+    img.dataset.aiBlobUrl = objectUrl;
     img.dataset.aiProcessed = 'true';
     img.dataset.aiProcessedSrc = sourceUrl;
     delete img.dataset.aiProcessingSrc;
@@ -126,15 +119,31 @@ async function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
     return objectUrl;
 }
 
+async function applyProcessedBlobToImage(img, sourceUrl, processedBlob) {
+    if (!(img instanceof HTMLImageElement)) return null;
+    if (!(processedBlob instanceof Blob)) return null;
+
+    rememberOriginalImageState(img, sourceUrl);
+
+    let objectUrl = img.dataset.aiBlobUrl || null;
+    if (!objectUrl) {
+        objectUrl = URL.createObjectURL(processedBlob);
+    }
+
+    return applyProcessedObjectUrlToImage(img, sourceUrl, objectUrl);
+}
+
 // Synchronous apply path used from the img.src setter hook.
 // When the memory cache already has the processed blob, this injects it
 // directly so the original image URL is never loaded — eliminating the
 // flash of the original image during page navigation.
 function applyCachedBlobFromSrcHook(img, sourceUrl, cachedBlob) {
+    if (!(img instanceof HTMLImageElement)) return null;
+    if (!(cachedBlob instanceof Blob)) return null;
+
     let objectUrl = img.dataset.aiBlobUrl || null;
     if (!objectUrl) {
         objectUrl = URL.createObjectURL(cachedBlob);
-        img.dataset.aiBlobUrl = objectUrl;
     }
 
     // Force-update the original-src reference to the new page URL.
@@ -152,16 +161,7 @@ function applyCachedBlobFromSrcHook(img, sourceUrl, cachedBlob) {
         img.dataset.aiOriginalImageRenderingPriority = img.style.getPropertyPriority('image-rendering') || '';
     }
 
-    img.dataset.aiProcessed = 'true';
-    img.dataset.aiProcessedSrc = sourceUrl;
-    delete img.dataset.aiProcessingSrc;
-    delete img.dataset.aiJobId;
-
-    img.removeAttribute('srcset');
-    img.removeAttribute('sizes');
-    img.style.setProperty('image-rendering', '-webkit-optimize-contrast');
-
-    return objectUrl;
+    return applyProcessedObjectUrlToImage(img, sourceUrl, objectUrl);
 }
 
 function disableUpscalingForContainer(container, activeImg = null) {

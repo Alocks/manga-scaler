@@ -21,16 +21,7 @@ const ALWAYS_LOG_LABELS = new Set([
     'bg-process:upscale-time',
     'process:upscale-time',
     'process:apply-cached',
-    'process:cache-write',
-    'cache:memory-hit',
-    'onnx:run-tiled-start',
-    'onnx:tiled-layout',
-    'onnx:tiled-run-success',
-    'onnx:run-success',
-    'onnx:run-failed',
-    'onnx:pass-profile',
-    'onnx:worker-pass-inference-complete',
-    'onnx:worker-pass-still-running'
+    'process:cache-write'
 ]);
 
 function bootstrapLog(label, data = {}) {

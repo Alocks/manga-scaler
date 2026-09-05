@@ -45,6 +45,7 @@
     "js": [
       "./node_modules/anime4k-webgpu/lib/index.js",
       "./node_modules/anime4k-webgl/anime4k.js",
+      "./node_modules/onnxruntime-web/dist/ort.all.min.js",
       "content.js",
       "src/runtime/runtime.bundle.js"
     ],
